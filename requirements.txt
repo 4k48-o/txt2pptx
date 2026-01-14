@@ -1,0 +1,20 @@
+# Manus PPT Generator - Dependencies
+# Python 3.10+
+
+# ============ FastAPI 相关 ============
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+
+# ============ 异步支持 ============
+httpx>=0.26.0
+aiofiles>=23.2.1
+
+# ============ 数据验证 ============
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# ============ 原有依赖 ============
+requests>=2.31.0
+python-dotenv>=1.0.0
+typing-extensions>=4.9.0

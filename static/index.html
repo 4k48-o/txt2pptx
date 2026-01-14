@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PPT 生成器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            width: 100%;
+            max-width: 600px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            color: #e94560;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2rem;
+            text-shadow: 0 0 20px rgba(233, 69, 96, 0.3);
+        }
+        
+        .form-group {
+            margin-bottom: 25px;
+        }
+        
+        label {
+            display: block;
+            color: #a0a0a0;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+        
+        textarea {
+            width: 100%;
+            padding: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            color: #fff;
+            font-size: 1rem;
+            resize: vertical;
+            min-height: 120px;
+            transition: border-color 0.3s;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: #e94560;
+        }
+        
+        textarea::placeholder {
+            color: #606060;
+        }
+        
+        select {
+            width: 100%;
+            padding: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            color: #fff;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        
+        select option {
+            background: #1a1a2e;
+            color: #fff;
+        }
+        
+        select:focus {
+            outline: none;
+            border-color: #e94560;
+        }
+        
+        input[type="text"] {
+            width: 100%;
+            padding: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            color: #fff;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+        
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #e94560;
+        }
+        
+        input[type="text"]::placeholder {
+            color: #606060;
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .form-group.half {
+            flex: 1;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #e94560, #ff6b6b);
+            color: #fff;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(233, 69, 96, 0.4);
+        }
+        
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .btn-download {
+            background: linear-gradient(135deg, #00d9ff, #00a8cc);
+            color: #fff;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .btn-download:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 217, 255, 0.4);
+        }
+        
+        .progress-section {
+            margin-top: 30px;
+            display: none;
+        }
+        
+        .progress-bar {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #e94560, #ff6b6b);
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+        
+        .progress-fill.animating {
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .status-text {
+            color: #a0a0a0;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+        
+        .status-text.success {
+            color: #4ecdc4;
+        }
+        
+        .status-text.error {
+            color: #ff6b6b;
+        }
+        
+        .task-info {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .task-info p {
+            color: #808080;
+            font-size: 0.85rem;
+            margin-bottom: 5px;
+        }
+        
+        .task-info span {
+            color: #c0c0c0;
+        }
+        
+        .task-info a {
+            color: #00d9ff;
+            text-decoration: none;
+        }
+        
+        .task-info a:hover {
+            text-decoration: underline;
+        }
+        
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            color: #505050;
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 PPT 生成器</h1>
+        
+        <div class="form-group">
+            <label for="prompt">请描述您想要的 PPT 内容</label>
+            <textarea id="prompt" placeholder="例如：创建一个关于人工智能发展趋势的PPT，包含历史、现状、未来展望三个部分，风格要专业商务"></textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="audience">目标受众</label>
+            <input type="text" id="audience" placeholder="例如：企业高管、大学生、技术开发者、投资人...">
+        </div>
+        
+        <div class="form-row">
+            <div class="form-group half">
+                <label for="slides">PPT 页数</label>
+                <select id="slides">
+                    <option value="3">3 页 (简短)</option>
+                    <option value="5" selected>5 页 (标准)</option>
+                    <option value="8">8 页 (详细)</option>
+                    <option value="10">10 页 (完整)</option>
+                </select>
+            </div>
+            
+            <div class="form-group half">
+                <label for="style">PPT 风格</label>
+                <select id="style">
+                    <option value="professional">🏢 专业商务</option>
+                    <option value="modern" selected>✨ 现代简约</option>
+                    <option value="creative">🎨 创意设计</option>
+                    <option value="academic">📚 学术报告</option>
+                    <option value="tech">💻 科技感</option>
+                    <option value="elegant">🌸 优雅清新</option>
+                </select>
+            </div>
+        </div>
+        
+        <button class="btn btn-primary" id="generateBtn" onclick="generatePPT()">
+            ✨ 开始生成
+        </button>
+        
+        <div class="progress-section" id="progressSection">
+            <div class="progress-bar">
+                <div class="progress-fill animating" id="progressFill" style="width: 0%"></div>
+            </div>
+            <p class="status-text" id="statusText">准备中...</p>
+        </div>
+        
+        <div class="task-info" id="taskInfo">
+            <p>任务 ID: <span id="taskId">-</span></p>
+            <p>任务标题: <span id="taskTitle">-</span></p>
+            <p id="taskUrlRow" style="display:none">在线查看: <a id="taskUrl" href="#" target="_blank">打开 Manus</a></p>
+        </div>
+        
+        <button class="btn btn-download" id="downloadBtn" onclick="downloadPPT()">
+            📥 下载 PPT
+        </button>
+        
+        <div class="footer">
+            Powered by Manus API
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+        let currentTaskId = null;
+        let pollInterval = null;
+
+        const styleNames = {
+            'professional': '专业商务风格',
+            'modern': '现代简约风格',
+            'creative': '创意设计风格',
+            'academic': '学术报告风格',
+            'tech': '科技感风格',
+            'elegant': '优雅清新风格'
+        };
+
+        async function generatePPT() {
+            const prompt = document.getElementById('prompt').value.trim();
+            const audience = document.getElementById('audience').value.trim();
+            const slides = document.getElementById('slides').value;
+            const style = document.getElementById('style').value;
+            
+            if (!prompt) {
+                alert('请输入 PPT 描述');
+                return;
+            }
+            
+            // 构建完整的提示词
+            let fullPrompt = prompt;
+            if (audience) {
+                fullPrompt += `，目标受众是${audience}`;
+            }
+            fullPrompt += `，请生成 ${slides} 页 PPT，采用${styleNames[style]}`;
+            
+            // 禁用按钮，显示进度
+            document.getElementById('generateBtn').disabled = true;
+            document.getElementById('generateBtn').textContent = '⏳ 生成中...';
+            document.getElementById('progressSection').style.display = 'block';
+            document.getElementById('downloadBtn').style.display = 'none';
+            document.getElementById('taskInfo').style.display = 'none';
+            document.getElementById('progressFill').classList.add('animating');
+            updateProgress(10, '正在创建任务...');
+            
+            try {
+                // 创建任务
+                const response = await fetch(`${API_BASE}/tasks`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: fullPrompt })
+                });
+                
+                const result = await response.json();
+                
+                if (!result.success) {
+                    throw new Error(result.message || '创建任务失败');
+                }
+                
+                currentTaskId = result.data.id;
+                document.getElementById('taskId').textContent = currentTaskId.slice(0, 8) + '...';
+                document.getElementById('taskInfo').style.display = 'block';
+                
+                updateProgress(20, '任务已创建，正在处理...');
+                
+                // 开始轮询
+                startPolling();
+                
+            } catch (error) {
+                handleError(error.message);
+            }
+        }
+        
+        function startPolling() {
+            pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/tasks/${currentTaskId}/detail`);
+                    const result = await response.json();
+                    
+                    if (!result.success) {
+                        throw new Error('获取任务状态失败');
+                    }
+                    
+                    const task = result.data;
+                    
+                    // 更新任务信息
+                    if (task.title) {
+                        document.getElementById('taskTitle').textContent = task.title;
+                    }
+                    if (task.task_url) {
+                        document.getElementById('taskUrl').href = task.task_url;
+                        document.getElementById('taskUrlRow').style.display = 'block';
+                    }
+                    
+                    // 根据状态更新进度
+                    switch (task.status) {
+                        case 'pending':
+                            updateProgress(20, '等待处理...');
+                            break;
+                        case 'uploading':
+                            updateProgress(30, '上传文件中...');
+                            break;
+                        case 'processing':
+                            updateProgress(50, 'Manus 正在生成 PPT...');
+                            break;
+                        case 'downloading':
+                            updateProgress(80, '下载结果中...');
+                            break;
+                        case 'completed':
+                            stopPolling();
+                            document.getElementById('progressFill').classList.remove('animating');
+                            updateProgress(100, '✅ 生成完成！', 'success');
+                            showDownloadButton();
+                            break;
+                        case 'failed':
+                            stopPolling();
+                            handleError(task.error || '任务失败');
+                            break;
+                    }
+                    
+                } catch (error) {
+                    console.error('Polling error:', error);
+                }
+            }, 3000); // 每 3 秒轮询一次
+        }
+        
+        function stopPolling() {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+        }
+        
+        function updateProgress(percent, text, className = '') {
+            document.getElementById('progressFill').style.width = percent + '%';
+            const statusEl = document.getElementById('statusText');
+            statusEl.textContent = text;
+            statusEl.className = 'status-text ' + className;
+        }
+        
+        function showDownloadButton() {
+            document.getElementById('downloadBtn').style.display = 'block';
+            document.getElementById('generateBtn').disabled = false;
+            document.getElementById('generateBtn').textContent = '✨ 重新生成';
+        }
+        
+        function handleError(message) {
+            stopPolling();
+            document.getElementById('progressFill').classList.remove('animating');
+            updateProgress(0, '❌ ' + message, 'error');
+            document.getElementById('generateBtn').disabled = false;
+            document.getElementById('generateBtn').textContent = '✨ 重新生成';
+        }
+        
+        function downloadPPT() {
+            if (currentTaskId) {
+                window.open(`${API_BASE}/tasks/${currentTaskId}/download`, '_blank');
+            }
+        }
+    </script>
+</body>
+</html>
+
