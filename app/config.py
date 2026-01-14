@@ -3,6 +3,7 @@ Application Configuration - 应用配置管理
 """
 
 import os
+from typing import List
 from pathlib import Path
 from functools import lru_cache
 from pydantic_settings import BaseSettings
@@ -40,7 +41,7 @@ class Settings(BaseSettings):
     debug: bool = Field(default=False, env="DEBUG")
 
     # CORS 配置
-    cors_origins: list[str] = Field(
+    cors_origins: List[str] = Field(
         default=["*"],
         env="CORS_ORIGINS",
     )

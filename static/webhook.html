@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PPT 生成器 - Webhook 模式</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            width: 100%;
+            max-width: 650px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4);
+        }
+        
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 30px;
+        }
+        
+        h1 {
+            color: #a855f7;
+            font-size: 1.8rem;
+            text-shadow: 0 0 30px rgba(168, 85, 247, 0.4);
+        }
+        
+        .ws-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: #808080;
+        }
+        
+        .ws-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ff4444;
+            transition: background 0.3s;
+        }
+        
+        .ws-dot.connected {
+            background: #44ff44;
+            box-shadow: 0 0 10px #44ff44;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            color: #909090;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+        
+        textarea {
+            width: 100%;
+            padding: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.4);
+            color: #fff;
+            font-size: 1rem;
+            resize: vertical;
+            min-height: 100px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: #a855f7;
+            box-shadow: 0 0 20px rgba(168, 85, 247, 0.2);
+        }
+        
+        textarea::placeholder {
+            color: #505050;
+        }
+        
+        input[type="text"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.4);
+            color: #fff;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+        
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #a855f7;
+        }
+        
+        input[type="text"]::placeholder {
+            color: #505050;
+        }
+        
+        select {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.4);
+            color: #fff;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        
+        select option {
+            background: #1a1a2e;
+            color: #fff;
+        }
+        
+        select:focus {
+            outline: none;
+            border-color: #a855f7;
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .form-group.half {
+            flex: 1;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #a855f7, #6366f1);
+            color: #fff;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 40px rgba(168, 85, 247, 0.4);
+        }
+        
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-download {
+            background: linear-gradient(135deg, #06b6d4, #0891b2);
+            color: #fff;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .btn-download:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 40px rgba(6, 182, 212, 0.4);
+        }
+        
+        .progress-section {
+            margin-top: 25px;
+            display: none;
+        }
+        
+        .progress-bar {
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #a855f7, #6366f1);
+            border-radius: 3px;
+            transition: width 0.5s ease;
+        }
+        
+        .progress-fill.animating {
+            animation: shimmer 2s infinite;
+            background: linear-gradient(90deg, #a855f7, #6366f1, #a855f7);
+            background-size: 200% 100%;
+        }
+        
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+        
+        .status-text {
+            color: #909090;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+        
+        .status-text.success {
+            color: #4ade80;
+        }
+        
+        .status-text.error {
+            color: #f87171;
+        }
+        
+        .task-info {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .task-info p {
+            color: #707070;
+            font-size: 0.85rem;
+            margin-bottom: 6px;
+        }
+        
+        .task-info span {
+            color: #b0b0b0;
+        }
+        
+        .task-info a {
+            color: #06b6d4;
+            text-decoration: none;
+        }
+        
+        .task-info a:hover {
+            text-decoration: underline;
+        }
+        
+        .event-log {
+            margin-top: 25px;
+            max-height: 200px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 15px;
+            display: none;
+        }
+        
+        .event-log h3 {
+            color: #707070;
+            font-size: 0.85rem;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .event-log-content {
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 0.75rem;
+            color: #909090;
+        }
+        
+        .event-item {
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .event-item:last-child {
+            border-bottom: none;
+        }
+        
+        .event-time {
+            color: #505050;
+        }
+        
+        .event-type {
+            color: #a855f7;
+            font-weight: 600;
+        }
+        
+        .event-type.success {
+            color: #4ade80;
+        }
+        
+        .event-type.error {
+            color: #f87171;
+        }
+        
+        .event-type.webhook {
+            color: #fbbf24;
+        }
+        
+        .footer {
+            margin-top: 25px;
+            text-align: center;
+            color: #404040;
+            font-size: 0.8rem;
+        }
+        
+        .mode-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #a855f7, #6366f1);
+            color: #fff;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            margin-left: 10px;
+        }
+        
+        .mode-switcher {
+            text-align: center;
+            margin-top: 15px;
+        }
+        
+        .mode-switcher a {
+            color: #606060;
+            font-size: 0.85rem;
+            text-decoration: none;
+        }
+        
+        .mode-switcher a:hover {
+            color: #a855f7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 PPT 生成器 <span class="mode-badge">Webhook</span></h1>
+            <div class="ws-status">
+                <div class="ws-dot" id="wsDot"></div>
+                <span id="wsStatusText">未连接</span>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label for="prompt">请描述您想要的 PPT 内容</label>
+            <textarea id="prompt" placeholder="例如：创建一个关于人工智能发展趋势的PPT，包含历史、现状、未来展望三个部分"></textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="audience">目标受众</label>
+            <input type="text" id="audience" placeholder="例如：企业高管、大学生、技术开发者...">
+        </div>
+        
+        <div class="form-row">
+            <div class="form-group half">
+                <label for="slides">PPT 页数</label>
+                <select id="slides">
+                    <option value="3">3 页</option>
+                    <option value="5" selected>5 页</option>
+                    <option value="8">8 页</option>
+                    <option value="10">10 页</option>
+                </select>
+            </div>
+            
+            <div class="form-group half">
+                <label for="style">PPT 风格</label>
+                <select id="style">
+                    <option value="professional">🏢 专业商务</option>
+                    <option value="modern" selected>✨ 现代简约</option>
+                    <option value="creative">🎨 创意设计</option>
+                    <option value="academic">📚 学术报告</option>
+                    <option value="tech">💻 科技感</option>
+                    <option value="elegant">🌸 优雅清新</option>
+                </select>
+            </div>
+        </div>
+        
+        <button class="btn btn-primary" id="generateBtn" onclick="generatePPT()">
+            ⚡ 开始生成
+        </button>
+        
+        <div class="progress-section" id="progressSection">
+            <div class="progress-bar">
+                <div class="progress-fill animating" id="progressFill" style="width: 0%"></div>
+            </div>
+            <p class="status-text" id="statusText">准备中...</p>
+        </div>
+        
+        <div class="task-info" id="taskInfo">
+            <p>任务 ID: <span id="taskId">-</span></p>
+            <p>任务标题: <span id="taskTitle">-</span></p>
+            <p id="taskUrlRow" style="display:none">在线查看: <a id="taskUrl" href="#" target="_blank">打开 Manus</a></p>
+        </div>
+        
+        <button class="btn btn-download" id="downloadBtn" onclick="downloadPPT()">
+            📥 下载 PPT
+        </button>
+        
+        <div class="event-log" id="eventLog">
+            <h3>📡 实时事件</h3>
+            <div class="event-log-content" id="eventLogContent"></div>
+        </div>
+        
+        <div class="mode-switcher">
+            <a href="/">← 切换到轮询模式</a>
+        </div>
+        
+        <div class="footer">
+            Powered by Manus API + WebSocket
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+        // 自动适配 ws/wss 协议
+        const WS_PROTOCOL = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const WS_URL = `${WS_PROTOCOL}//${window.location.host}/ws`;
+        
+        let ws = null;
+        let clientId = null;
+        let currentTaskId = null;
+        let reconnectAttempts = 0;
+        const MAX_RECONNECT_ATTEMPTS = 5;
+        
+        const styleNames = {
+            'professional': '专业商务风格',
+            'modern': '现代简约风格',
+            'creative': '创意设计风格',
+            'academic': '学术报告风格',
+            'tech': '科技感风格',
+            'elegant': '优雅清新风格'
+        };
+        
+        // 生成唯一客户端 ID
+        function generateClientId() {
+            return 'client_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+        }
+        
+        // 初始化 WebSocket 连接
+        function initWebSocket() {
+            if (!clientId) {
+                clientId = generateClientId();
+            }
+            
+            ws = new WebSocket(`${WS_URL}/${clientId}`);
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                reconnectAttempts = 0;
+                updateWsStatus(true);
+                logEvent('connected', '已连接到服务器');
+            };
+            
+            ws.onclose = (e) => {
+                console.log('WebSocket disconnected', e);
+                updateWsStatus(false);
+                logEvent('disconnected', '连接已断开');
+                
+                // 自动重连
+                if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    reconnectAttempts++;
+                    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+                    console.log(`Reconnecting in ${delay}ms... (attempt ${reconnectAttempts})`);
+                    setTimeout(initWebSocket, delay);
+                }
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                logEvent('error', 'WebSocket 错误');
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    handleWsMessage(message);
+                } catch (e) {
+                    console.error('Failed to parse message:', e);
+                }
+            };
+        }
+        
+        // 处理 WebSocket 消息
+        function handleWsMessage(message) {
+            console.log('Received:', message);
+            
+            switch (message.type) {
+                case 'connected':
+                    logEvent('connected', `客户端 ID: ${message.client_id}`);
+                    break;
+                    
+                case 'subscribed':
+                    logEvent('subscribed', `已订阅任务: ${message.task_id}`);
+                    break;
+                    
+                case 'task_created':
+                    logEvent('task_created', `任务已创建: ${message.title || message.task_id}`, 'success');
+                    if (message.title) {
+                        document.getElementById('taskTitle').textContent = message.title;
+                    }
+                    if (message.task_url) {
+                        document.getElementById('taskUrl').href = message.task_url;
+                        document.getElementById('taskUrlRow').style.display = 'block';
+                    }
+                    updateProgress(40, message.message || '任务已创建...');
+                    break;
+                    
+                case 'task_update':
+                    logEvent('task_update', message.message || `状态: ${message.status}`);
+                    if (message.status === 'running') {
+                        updateProgress(60, message.message || 'PPT 正在生成中...');
+                    }
+                    break;
+                    
+                case 'task_completed':
+                    logEvent('task_completed', message.message || 'PPT 生成完成！', 'success');
+                    currentTaskId = message.local_task_id || currentTaskId;
+                    if (message.title) {
+                        document.getElementById('taskTitle').textContent = message.title;
+                    }
+                    document.getElementById('progressFill').classList.remove('animating');
+                    updateProgress(100, '✅ 生成完成！', 'success');
+                    showDownloadButton();
+                    break;
+                    
+                case 'task_failed':
+                    logEvent('task_failed', message.error || '任务失败', 'error');
+                    handleError(message.error || '任务失败');
+                    break;
+                
+                case 'webhook_event':
+                    // Manus Webhook 原始事件
+                    logEvent('webhook', `[${message.event_type}] ${message.status || ''} - ${message.message || ''}`.trim(), 'webhook');
+                    break;
+                    
+                case 'ping':
+                    // 响应心跳
+                    sendWsMessage({ action: 'pong' });
+                    break;
+                    
+                case 'pong':
+                    // 心跳响应
+                    break;
+                    
+                case 'error':
+                    logEvent('error', message.message, 'error');
+                    break;
+                    
+                default:
+                    logEvent(message.type, JSON.stringify(message.data || message));
+            }
+        }
+        
+        // 发送 WebSocket 消息
+        function sendWsMessage(message) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(message));
+            }
+        }
+        
+        // 更新 WebSocket 状态显示
+        function updateWsStatus(connected) {
+            const dot = document.getElementById('wsDot');
+            const text = document.getElementById('wsStatusText');
+            
+            if (connected) {
+                dot.classList.add('connected');
+                text.textContent = '已连接';
+            } else {
+                dot.classList.remove('connected');
+                text.textContent = '未连接';
+            }
+        }
+        
+        // 记录事件日志
+        function logEvent(type, message, className = '') {
+            const logContent = document.getElementById('eventLogContent');
+            const logContainer = document.getElementById('eventLog');
+            
+            logContainer.style.display = 'block';
+            
+            const time = new Date().toLocaleTimeString();
+            const item = document.createElement('div');
+            item.className = 'event-item';
+            item.innerHTML = `
+                <span class="event-time">[${time}]</span>
+                <span class="event-type ${className}">${type}</span>
+                <span>${message}</span>
+            `;
+            
+            logContent.insertBefore(item, logContent.firstChild);
+            
+            // 限制日志数量
+            while (logContent.children.length > 20) {
+                logContent.removeChild(logContent.lastChild);
+            }
+        }
+        
+        // 生成 PPT
+        async function generatePPT() {
+            const prompt = document.getElementById('prompt').value.trim();
+            const audience = document.getElementById('audience').value.trim();
+            const slides = document.getElementById('slides').value;
+            const style = document.getElementById('style').value;
+            
+            if (!prompt) {
+                alert('请输入 PPT 描述');
+                return;
+            }
+            
+            // 检查 WebSocket 连接
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('WebSocket 未连接，正在重新连接...');
+                initWebSocket();
+                return;
+            }
+            
+            // 构建完整的提示词
+            let fullPrompt = prompt;
+            if (audience) {
+                fullPrompt += `，目标受众是${audience}`;
+            }
+            fullPrompt += `，请生成 ${slides} 页 PPT，采用${styleNames[style]}`;
+            
+            // 禁用按钮，显示进度
+            document.getElementById('generateBtn').disabled = true;
+            document.getElementById('generateBtn').textContent = '⏳ 生成中...';
+            document.getElementById('progressSection').style.display = 'block';
+            document.getElementById('downloadBtn').style.display = 'none';
+            document.getElementById('taskInfo').style.display = 'none';
+            document.getElementById('progressFill').classList.add('animating');
+            updateProgress(10, '正在创建任务...');
+            
+            try {
+                // 使用 V2 API 创建任务
+                const response = await fetch(`${API_BASE}/v2/tasks`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        prompt: fullPrompt,
+                        client_id: clientId
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (!result.success) {
+                    throw new Error(result.detail || result.message || '创建任务失败');
+                }
+                
+                currentTaskId = result.data.id;
+                document.getElementById('taskId').textContent = currentTaskId.slice(0, 8) + '...';
+                document.getElementById('taskInfo').style.display = 'block';
+                
+                logEvent('task_created', `本地任务: ${currentTaskId}`, 'success');
+                updateProgress(25, '任务已创建，等待 Manus 处理...');
+                
+            } catch (error) {
+                handleError(error.message);
+            }
+        }
+        
+        function updateProgress(percent, text, className = '') {
+            document.getElementById('progressFill').style.width = percent + '%';
+            const statusEl = document.getElementById('statusText');
+            statusEl.textContent = text;
+            statusEl.className = 'status-text ' + className;
+        }
+        
+        function showDownloadButton() {
+            document.getElementById('downloadBtn').style.display = 'block';
+            document.getElementById('generateBtn').disabled = false;
+            document.getElementById('generateBtn').textContent = '⚡ 重新生成';
+        }
+        
+        function handleError(message) {
+            document.getElementById('progressFill').classList.remove('animating');
+            updateProgress(0, '❌ ' + message, 'error');
+            document.getElementById('generateBtn').disabled = false;
+            document.getElementById('generateBtn').textContent = '⚡ 重新生成';
+        }
+        
+        function downloadPPT() {
+            if (currentTaskId) {
+                window.open(`${API_BASE}/tasks/${currentTaskId}/download`, '_blank');
+            }
+        }
+        
+        // 页面加载时初始化 WebSocket
+        document.addEventListener('DOMContentLoaded', () => {
+            initWebSocket();
+        });
+        
+        // 页面关闭时断开连接
+        window.addEventListener('beforeunload', () => {
+            if (ws) {
+                ws.close();
+            }
+        });
+    </script>
+</body>
+</html>

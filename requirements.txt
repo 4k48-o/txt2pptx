@@ -1,5 +1,5 @@
 # Manus PPT Generator - Dependencies
-# Python 3.10+
+# Python 3.9+
 
 # ============ FastAPI 相关 ============
 fastapi>=0.109.0

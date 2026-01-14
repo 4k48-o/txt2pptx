@@ -22,6 +22,20 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class WebhookEvent:
+    """Webhook 事件数据结构"""
+    event_id: str                              # 事件 ID
+    event_type: str                            # 事件类型: task_created, task_state_change
+    status: Optional[str] = None               # 任务状态
+    message: Optional[str] = None              # 事件消息
+    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    raw_payload: Optional[Dict[str, Any]] = None  # 原始 payload
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
 class LocalTask:
     """本地任务数据结构"""
 
@@ -41,6 +55,9 @@ class LocalTask:
     title: Optional[str] = None                # 任务标题
     task_url: Optional[str] = None             # Manus 任务链接
     credit_usage: int = 0                      # 消耗积分
+    
+    # Webhook 事件列表
+    webhook_events: List[Dict[str, Any]] = field(default_factory=list)
     
     # 时间戳
     created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
@@ -253,4 +270,148 @@ class TaskTrackerService:
         if status:
             return sum(1 for t in tasks.values() if t.get("status") == status)
         return len(tasks)
+
+    async def find_by_manus_task_id(self, manus_task_id: str) -> Optional[Dict[str, Any]]:
+        """
+        根据 Manus 任务 ID 查找本地任务
+
+        Args:
+            manus_task_id: Manus 任务 ID
+
+        Returns:
+            任务字典，不存在返回 None
+        """
+        async with self._lock:
+            tasks = await self._load_tasks()
+        
+        for task_data in tasks.values():
+            if task_data.get("manus_task_id") == manus_task_id:
+                return task_data
+        return None
+
+    def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """
+        同步获取任务（用于简单场景）
+
+        Args:
+            task_id: 任务 ID
+
+        Returns:
+            任务字典
+        """
+        try:
+            with open(self._storage_path, "r", encoding="utf-8") as f:
+                tasks = json.load(f)
+            return tasks.get(task_id)
+        except (json.JSONDecodeError, FileNotFoundError):
+            return None
+
+    def update_task(self, task_id: str, **kwargs) -> bool:
+        """
+        同步更新任务（用于简单场景）
+
+        Args:
+            task_id: 任务 ID
+            **kwargs: 要更新的字段
+
+        Returns:
+            是否更新成功
+        """
+        try:
+            with open(self._storage_path, "r", encoding="utf-8") as f:
+                tasks = json.load(f)
+            
+            if task_id not in tasks:
+                return False
+            
+            tasks[task_id].update(kwargs)
+            tasks[task_id]["updated_at"] = datetime.utcnow().isoformat()
+            
+            if kwargs.get("status") == LocalTaskStatus.COMPLETED.value:
+                tasks[task_id]["completed_at"] = datetime.utcnow().isoformat()
+            
+            with open(self._storage_path, "w", encoding="utf-8") as f:
+                json.dump(tasks, f, ensure_ascii=False, indent=2)
+            
+            return True
+        except (json.JSONDecodeError, FileNotFoundError):
+            return False
+
+    async def add_webhook_event(
+        self,
+        task_id: str,
+        event_id: str,
+        event_type: str,
+        status: Optional[str] = None,
+        message: Optional[str] = None,
+        raw_payload: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        添加 Webhook 事件到任务
+
+        Args:
+            task_id: 任务 ID（本地或 Manus）
+            event_id: 事件 ID
+            event_type: 事件类型
+            status: 任务状态
+            message: 事件消息
+            raw_payload: 原始 payload
+
+        Returns:
+            添加的事件，失败返回 None
+        """
+        event = WebhookEvent(
+            event_id=event_id,
+            event_type=event_type,
+            status=status,
+            message=message,
+            raw_payload=raw_payload,
+        )
+        
+        async with self._lock:
+            tasks = await self._load_tasks()
+            
+            # 先尝试按本地 ID 查找
+            task_data = tasks.get(task_id)
+            
+            # 再尝试按 Manus ID 查找
+            if not task_data:
+                for tid, tdata in tasks.items():
+                    if tdata.get("manus_task_id") == task_id:
+                        task_id = tid
+                        task_data = tdata
+                        break
+            
+            if not task_data:
+                logger.warning(f"添加 Webhook 事件失败: 任务不存在 task_id={task_id}")
+                return None
+            
+            # 初始化 webhook_events 列表（兼容旧数据）
+            if "webhook_events" not in task_data:
+                task_data["webhook_events"] = []
+            
+            # 添加事件
+            task_data["webhook_events"].append(event.to_dict())
+            task_data["updated_at"] = datetime.utcnow().isoformat()
+            
+            tasks[task_id] = task_data
+            await self._save_tasks(tasks)
+        
+        logger.info(f"Webhook 事件已记录: task_id={task_id}, event_type={event_type}")
+        return event.to_dict()
+
+    async def get_webhook_events(self, task_id: str) -> List[Dict[str, Any]]:
+        """
+        获取任务的所有 Webhook 事件
+
+        Args:
+            task_id: 任务 ID
+
+        Returns:
+            事件列表
+        """
+        task = await self.get(task_id)
+        if task:
+            return task.webhook_events or []
+        return []
 

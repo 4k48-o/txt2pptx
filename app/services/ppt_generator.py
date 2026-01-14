@@ -5,7 +5,7 @@ PPT Generator Service - PPT 生成服务
 """
 
 import logging
-from typing import Optional, List, Dict, Any, Callable, Awaitable
+from typing import Optional, List, Dict, Any, Callable, Awaitable, Tuple
 from pathlib import Path
 from datetime import datetime
 
@@ -217,7 +217,7 @@ class PPTGeneratorService:
     def _extract_pptx_info(
         self,
         task: Dict[str, Any],
-    ) -> tuple[Optional[str], Optional[str]]:
+    ) -> Tuple[Optional[str], Optional[str]]:
         """
         从任务响应中提取 PPTX 下载信息
 
@@ -281,4 +281,119 @@ class PPTGeneratorService:
 
         logger.info(f"Downloaded PPTX: {local_path} ({len(response.content)} bytes)")
         return str(local_path)
+
+    # ========== Webhook 模式方法 ==========
+
+    async def create_manus_task(
+        self,
+        local_task_id: str,
+        prompt: str,
+        attachments: Optional[List[Dict[str, str]]] = None,
+    ) -> Optional[str]:
+        """
+        创建 Manus 任务（Webhook 模式，不轮询）
+
+        Args:
+            local_task_id: 本地任务 ID
+            prompt: 提示词
+            attachments: 附件列表
+
+        Returns:
+            Manus 任务 ID
+        """
+        logger.info(f"[Webhook] Creating Manus task for: {local_task_id}")
+
+        # 上传附件
+        uploaded_attachments = await self._upload_attachments(local_task_id, attachments or [])
+
+        # 更新状态
+        await self.tracker.update(
+            local_task_id,
+            status=LocalTaskStatus.PROCESSING.value,
+        )
+
+        # 创建 Manus 任务
+        manus_task = await self.task_manager.create_task(
+            prompt=prompt,
+            attachments=uploaded_attachments if uploaded_attachments else None,
+        )
+
+        manus_task_id = manus_task.get("id") or manus_task.get("task_id")
+        task_title = manus_task.get("task_title") or manus_task.get("metadata", {}).get("task_title")
+        task_url = manus_task.get("task_url") or manus_task.get("metadata", {}).get("task_url")
+
+        # 更新本地任务
+        await self.tracker.update(
+            local_task_id,
+            manus_task_id=manus_task_id,
+            title=task_title,
+            task_url=task_url,
+        )
+
+        logger.info(f"[Webhook] Manus task created: {manus_task_id}")
+        return manus_task_id
+
+    async def download_completed_task(
+        self,
+        manus_task_id: str,
+    ) -> Optional[str]:
+        """
+        下载已完成任务的 PPTX（Webhook 模式）
+
+        Args:
+            manus_task_id: Manus 任务 ID
+
+        Returns:
+            本地文件路径
+        """
+        logger.info(f"[Webhook] Downloading completed task: {manus_task_id}")
+
+        # 查找本地任务
+        local_task_data = await self.tracker.find_by_manus_task_id(manus_task_id)
+        if not local_task_data:
+            logger.error(f"Local task not found for manus_task_id: {manus_task_id}")
+            return None
+
+        local_task_id = local_task_data["id"]
+
+        # 获取任务详情（带 convert=true 获取 PPTX）
+        task_detail = await self.task_manager.get_task(manus_task_id, convert=True)
+
+        # 提取 PPTX 信息
+        pptx_url, pptx_filename = self._extract_pptx_info(task_detail)
+
+        if not pptx_url:
+            logger.warning(f"No PPTX URL found for task: {manus_task_id}")
+            await self.tracker.update(
+                local_task_id,
+                status=LocalTaskStatus.COMPLETED.value,
+                credit_usage=task_detail.get("credit_usage", 0),
+            )
+            return None
+
+        # 更新状态
+        await self.tracker.update(
+            local_task_id,
+            status=LocalTaskStatus.DOWNLOADING.value,
+            pptx_url=pptx_url,
+            pptx_filename=pptx_filename,
+            credit_usage=task_detail.get("credit_usage", 0),
+        )
+
+        # 下载文件
+        local_file_path = await self._download_pptx(
+            local_task_id,
+            pptx_url,
+            pptx_filename,
+        )
+
+        # 更新完成状态
+        await self.tracker.update(
+            local_task_id,
+            status=LocalTaskStatus.COMPLETED.value,
+            local_file_path=local_file_path,
+        )
+
+        logger.info(f"[Webhook] Task completed and downloaded: {local_file_path}")
+        return local_file_path
 
