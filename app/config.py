@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     poll_interval: int = Field(default=5, env="POLL_INTERVAL")
     poll_timeout: int = Field(default=600, env="POLL_TIMEOUT")
 
+    # Webhook 配置
+    webhook_enabled: bool = Field(default=False, env="WEBHOOK_ENABLED")
+    webhook_base_url: str = Field(default="", env="WEBHOOK_BASE_URL")
+    webhook_path: str = Field(default="/webhook/manus", env="WEBHOOK_PATH")
+
     # 存储配置
     output_dir: Path = Field(default=Path("./storage/output"), env="OUTPUT_DIR")
     tasks_file: Path = Field(default=Path("./storage/tasks.json"), env="TASKS_FILE")
