@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>任务列表 - PPT 生成器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .header {
+            max-width: 1200px;
+            margin: 0 auto 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        
+        h1 {
+            color: #e94560;
+            font-size: 2rem;
+            text-shadow: 0 0 20px rgba(233, 69, 96, 0.3);
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .nav-links a {
+            color: #a0a0a0;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        
+        .nav-links a:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .filters {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .filter-group label {
+            color: #a0a0a0;
+            font-size: 0.9rem;
+        }
+        
+        .filter-group select {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: #fff;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        
+        .filter-group select:focus {
+            outline: none;
+            border-color: #e94560;
+        }
+        
+        .task-list {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .task-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        
+        .task-card:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(233, 69, 96, 0.5);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 15px;
+        }
+        
+        .task-title {
+            color: #fff;
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .task-id {
+            color: #888;
+            font-size: 0.85rem;
+            font-family: monospace;
+        }
+        
+        .task-status {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        
+        .status-pending { background: rgba(255, 193, 7, 0.2); color: #ffc107; }
+        .status-processing { background: rgba(33, 150, 243, 0.2); color: #2196f3; }
+        .status-completed { background: rgba(76, 175, 80, 0.2); color: #4caf50; }
+        .status-failed { background: rgba(244, 67, 54, 0.2); color: #f44336; }
+        
+        .task-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .info-item {
+            color: #a0a0a0;
+            font-size: 0.9rem;
+        }
+        
+        .info-item strong {
+            color: #fff;
+        }
+        
+        .task-prompt {
+            color: #ccc;
+            font-size: 0.9rem;
+            margin-bottom: 15px;
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .task-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .btn-primary {
+            background: #e94560;
+            color: #fff;
+        }
+        
+        .btn-primary:hover {
+            background: #d63447;
+            transform: translateY(-1px);
+        }
+        
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+        
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .btn-danger {
+            background: rgba(244, 67, 54, 0.2);
+            color: #f44336;
+            border: 1px solid rgba(244, 67, 54, 0.3);
+        }
+        
+        .btn-danger:hover {
+            background: rgba(244, 67, 54, 0.3);
+        }
+        
+        .loading {
+            text-align: center;
+            color: #a0a0a0;
+            padding: 40px;
+        }
+        
+        .empty {
+            text-align: center;
+            color: #a0a0a0;
+            padding: 60px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+        }
+        
+        .empty-icon {
+            font-size: 3rem;
+            margin-bottom: 20px;
+        }
+        
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 30px;
+        }
+        
+        .pagination button {
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .pagination button:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+        
+        .modal.active {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 20px;
+        }
+        
+        .modal-content {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 900px;
+            width: 100%;
+            margin-top: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+        
+        .modal-header h2 {
+            color: #e94560;
+            font-size: 1.5rem;
+        }
+        
+        .close-btn {
+            background: none;
+            border: none;
+            color: #a0a0a0;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.3s;
+        }
+        
+        .close-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+        
+        .detail-section {
+            margin-bottom: 25px;
+        }
+        
+        .detail-section h3 {
+            color: #fff;
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .detail-item {
+            margin-bottom: 12px;
+            color: #ccc;
+        }
+        
+        .detail-item strong {
+            color: #fff;
+            display: inline-block;
+            min-width: 120px;
+        }
+        
+        .files-list {
+            display: grid;
+            gap: 10px;
+        }
+        
+        .file-item {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .file-info {
+            flex: 1;
+        }
+        
+        .file-name {
+            color: #fff;
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+        
+        .file-type {
+            color: #888;
+            font-size: 0.85rem;
+        }
+        
+        .file-actions {
+            display: flex;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📋 任务列表</h1>
+        <div class="nav-links">
+            <a href="/">创建任务</a>
+            <a href="/realtime">实时模式</a>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="filters">
+            <div class="filter-group">
+                <label>状态:</label>
+                <select id="statusFilter">
+                    <option value="">全部</option>
+                    <option value="pending">等待中</option>
+                    <option value="processing">处理中</option>
+                    <option value="completed">已完成</option>
+                    <option value="failed">失败</option>
+                </select>
+            </div>
+            <button class="btn btn-secondary" onclick="loadTasks()">刷新</button>
+        </div>
+        
+        <div id="taskList" class="task-list">
+            <div class="loading">加载中...</div>
+        </div>
+        
+        <div id="pagination" class="pagination"></div>
+    </div>
+    
+    <!-- 任务详情模态框 -->
+    <div id="taskModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>任务详情</h2>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = '/api';
+        let currentPage = 0;
+        const pageSize = 20;
+        let currentStatus = '';
+        
+        // 状态映射
+        const statusMap = {
+            'pending': '等待中',
+            'uploading': '上传中',
+            'processing': '处理中',
+            'downloading': '下载中',
+            'completed': '已完成',
+            'failed': '失败'
+        };
+        
+        // 页面加载时
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTasks();
+            
+            // 状态过滤
+            document.getElementById('statusFilter').addEventListener('change', (e) => {
+                currentStatus = e.target.value;
+                currentPage = 0;
+                loadTasks();
+            });
+        });
+        
+        // 加载任务列表
+        async function loadTasks() {
+            const listEl = document.getElementById('taskList');
+            listEl.innerHTML = '<div class="loading">加载中...</div>';
+            
+            try {
+                let url = `${API_BASE}/tasks?limit=${pageSize}&offset=${currentPage * pageSize}`;
+                if (currentStatus) {
+                    url += `&status=${currentStatus}`;
+                }
+                
+                const response = await fetch(url);
+                const result = await response.json();
+                
+                if (!result.success) {
+                    throw new Error(result.message || '加载失败');
+                }
+                
+                const tasks = result.data.tasks || [];
+                
+                if (tasks.length === 0) {
+                    listEl.innerHTML = `
+                        <div class="empty">
+                            <div class="empty-icon">📭</div>
+                            <p>暂无任务</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                listEl.innerHTML = tasks.map(task => createTaskCard(task)).join('');
+                
+                // 更新分页
+                updatePagination(result.data.total || 0, result.data.has_more || false);
+                
+            } catch (error) {
+                listEl.innerHTML = `<div class="empty"><p style="color: #f44336;">加载失败: ${error.message}</p></div>`;
+                console.error('Load tasks error:', error);
+            }
+        }
+        
+        // 创建任务卡片
+        function createTaskCard(task) {
+            const statusClass = `status-${task.status}`;
+            const statusText = statusMap[task.status] || task.status;
+            const createdDate = task.created_at ? new Date(task.created_at).toLocaleString('zh-CN') : '-';
+            const title = task.metadata?.task_title || task.prompt?.substring(0, 50) || '无标题';
+            
+            return `
+                <div class="task-card" onclick="showTaskDetail('${task.id}')">
+                    <div class="task-header">
+                        <div>
+                            <div class="task-title">${title}</div>
+                            <div class="task-id">ID: ${task.id.substring(0, 8)}...</div>
+                        </div>
+                        <span class="task-status ${statusClass}">${statusText}</span>
+                    </div>
+                    <div class="task-info">
+                        <div class="info-item">
+                            <strong>创建时间:</strong> ${createdDate}
+                        </div>
+                        ${task.credit_usage ? `
+                        <div class="info-item">
+                            <strong>消耗积分:</strong> ${task.credit_usage}
+                        </div>
+                        ` : ''}
+                    </div>
+                    <div class="task-prompt">${task.prompt || '无描述'}</div>
+                    <div class="task-actions" onclick="event.stopPropagation()">
+                        <button class="btn btn-primary" onclick="showTaskDetail('${task.id}')">查看详情</button>
+                        ${task.status === 'completed' ? `
+                        <a href="${API_BASE}/tasks/${task.id}/download" class="btn btn-secondary">下载 PPT</a>
+                        ` : ''}
+                        ${task.metadata?.task_url ? `
+                        <a href="${task.metadata.task_url}" target="_blank" class="btn btn-secondary">在线查看</a>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }
+        
+        // 更新分页
+        function updatePagination(total, hasMore) {
+            const paginationEl = document.getElementById('pagination');
+            const totalPages = Math.ceil(total / pageSize);
+            
+            if (totalPages <= 1) {
+                paginationEl.innerHTML = '';
+                return;
+            }
+            
+            paginationEl.innerHTML = `
+                <button onclick="changePage(${currentPage - 1})" ${currentPage === 0 ? 'disabled' : ''}>上一页</button>
+                <span style="color: #a0a0a0; padding: 8px 16px;">第 ${currentPage + 1} 页 / 共 ${totalPages} 页</span>
+                <button onclick="changePage(${currentPage + 1})" ${!hasMore ? 'disabled' : ''}>下一页</button>
+            `;
+        }
+        
+        // 切换页面
+        function changePage(page) {
+            if (page < 0) return;
+            currentPage = page;
+            loadTasks();
+        }
+        
+        // 显示任务详情
+        async function showTaskDetail(taskId) {
+            const modal = document.getElementById('taskModal');
+            const modalBody = document.getElementById('modalBody');
+            
+            modal.classList.add('active');
+            modalBody.innerHTML = '<div class="loading">加载中...</div>';
+            
+            try {
+                // 获取完整详情
+                const response = await fetch(`${API_BASE}/tasks/${taskId}/full`);
+                const result = await response.json();
+                
+                if (!result.success) {
+                    throw new Error(result.message || '加载失败');
+                }
+                
+                const task = result.data;
+                const statusClass = `status-${task.status}`;
+                const statusText = statusMap[task.status] || task.status;
+                
+                modalBody.innerHTML = `
+                    <div class="detail-section">
+                        <h3>基本信息</h3>
+                        <div class="detail-item"><strong>任务 ID:</strong> ${task.id}</div>
+                        <div class="detail-item"><strong>状态:</strong> <span class="task-status ${statusClass}">${statusText}</span></div>
+                        ${task.title ? `<div class="detail-item"><strong>标题:</strong> ${task.title}</div>` : ''}
+                        <div class="detail-item"><strong>提示词:</strong> ${task.prompt || '无'}</div>
+                        ${task.created_at ? `<div class="detail-item"><strong>创建时间:</strong> ${new Date(task.created_at).toLocaleString('zh-CN')}</div>` : ''}
+                        ${task.updated_at ? `<div class="detail-item"><strong>更新时间:</strong> ${new Date(task.updated_at).toLocaleString('zh-CN')}</div>` : ''}
+                        ${task.credit_usage ? `<div class="detail-item"><strong>消耗积分:</strong> ${task.credit_usage}</div>` : ''}
+                        ${task.task_url ? `<div class="detail-item"><strong>在线查看:</strong> <a href="${task.task_url}" target="_blank" style="color: #e94560;">${task.task_url}</a></div>` : ''}
+                    </div>
+                    
+                    <div class="detail-section">
+                        <h3>生成的文件 (${task.files?.length || 0})</h3>
+                        ${task.files && task.files.length > 0 ? `
+                            <div class="files-list">
+                                ${task.files.map((file, index) => {
+                                    const fileName = file.file_name || file.fileName || '未命名文件';
+                                    const fileUrl = file.file_url || file.fileUrl || '';
+                                    const mimeType = file.mime_type || file.mimeType || '未知类型';
+                                    const isPptx = fileName.toLowerCase().endsWith('.pptx') || mimeType.includes('presentation');
+                                    const fileIcon = isPptx ? '📊' : '📄';
+                                    
+                                    return `
+                                    <div class="file-item">
+                                        <div class="file-info">
+                                            <div class="file-name">${fileIcon} ${fileName}</div>
+                                            <div class="file-type">${mimeType}</div>
+                                        </div>
+                                        <div class="file-actions">
+                                            ${fileUrl ? `<a href="${fileUrl}" target="_blank" class="btn btn-primary" download="${fileName}">下载</a>` : ''}
+                                            ${task.local_file_path && index === 0 ? `<a href="${API_BASE}/tasks/${task.id}/download" class="btn btn-secondary">下载本地</a>` : ''}
+                                        </div>
+                                    </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        ` : '<p style="color: #888;">暂无文件</p>'}
+                    </div>
+                    
+                    ${task.local_file_path ? `
+                    <div class="detail-section">
+                        <h3>本地文件</h3>
+                        <div class="detail-item">
+                            <strong>路径:</strong> ${task.local_file_path}
+                        </div>
+                        <div class="task-actions" style="margin-top: 15px;">
+                            <a href="${API_BASE}/tasks/${task.id}/download" class="btn btn-primary">下载本地文件</a>
+                        </div>
+                    </div>
+                    ` : ''}
+                `;
+                
+            } catch (error) {
+                modalBody.innerHTML = `<div class="empty"><p style="color: #f44336;">加载失败: ${error.message}</p></div>`;
+                console.error('Load task detail error:', error);
+            }
+        }
+        
+        // 关闭模态框
+        function closeModal() {
+            document.getElementById('taskModal').classList.remove('active');
+        }
+        
+        // 点击模态框外部关闭
+        document.getElementById('taskModal').addEventListener('click', (e) => {
+            if (e.target.id === 'taskModal') {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>

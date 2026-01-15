@@ -9,6 +9,8 @@ from .task import (
     TaskListResponse,
     TaskListItem,
     TaskProgressResponse,
+    TaskDetailResponse,
+    TaskFile,
     TaskStatus,
     LocalTaskStatus,
     CreateTaskResponse,
@@ -32,6 +34,8 @@ __all__ = [
     "TaskListResponse",
     "TaskListItem",
     "TaskProgressResponse",
+    "TaskDetailResponse",
+    "TaskFile",
     "TaskStatus",
     "LocalTaskStatus",
     # File

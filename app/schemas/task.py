@@ -138,3 +138,40 @@ class CreateTaskResponse(BaseModel):
     status: TaskStatus = Field(default=TaskStatus.PENDING, description="任务状态")
     message: str = Field(default="Task created successfully", description="响应消息")
 
+
+class TaskFile(BaseModel):
+    """任务生成的文件"""
+    
+    file_url: str = Field(..., alias="fileUrl", description="文件下载链接")
+    file_name: str = Field(..., alias="fileName", description="文件名")
+    mime_type: Optional[str] = Field(default=None, alias="mimeType", description="MIME 类型")
+    
+    class Config:
+        populate_by_name = True
+
+
+class TaskDetailResponse(BaseModel):
+    """任务详情响应（包含完整信息和文件列表）"""
+    
+    id: str = Field(..., description="任务 ID")
+    status: TaskStatus = Field(..., description="任务状态")
+    prompt: Optional[str] = Field(default=None, description="任务提示词")
+    title: Optional[str] = Field(default=None, description="任务标题")
+    task_url: Optional[str] = Field(default=None, description="任务在线查看链接")
+    credit_usage: Optional[int] = Field(default=None, description="消耗的积分")
+    created_at: Optional[datetime] = Field(default=None, description="创建时间")
+    updated_at: Optional[datetime] = Field(default=None, description="更新时间")
+    
+    # 生成的文件列表
+    files: List[TaskFile] = Field(default_factory=list, description="任务生成的所有文件")
+    
+    # 完整的输出消息（可选）
+    output: Optional[List[Dict[str, Any]]] = Field(default=None, description="完整输出消息")
+    
+    # 本地文件路径（如果已下载）
+    local_file_path: Optional[str] = Field(default=None, description="本地文件路径")
+    
+    class Config:
+        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+        populate_by_name = True
+

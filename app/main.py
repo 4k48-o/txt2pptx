@@ -128,6 +128,15 @@ async def realtime_page():
     return {"error": "webhook.html not found"}
 
 
+@app.get("/tasks")
+async def tasks_page():
+    """任务列表页面"""
+    tasks_file = STATIC_DIR / "tasks.html"
+    if tasks_file.exists():
+        return FileResponse(tasks_file)
+    return {"error": "tasks.html not found"}
+
+
 # 挂载静态文件（放在最后，避免覆盖其他路由）
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

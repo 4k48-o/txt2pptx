@@ -16,6 +16,7 @@ from ..schemas import (
     CreateTaskRequest,
     CreateTaskResponse,
     LocalTaskStatus,
+    TaskStatus,
     APIResponse,
 )
 from ..services import TaskTrackerService, PPTGeneratorService
@@ -116,7 +117,7 @@ async def create_task_v2(
             success=True,
             data=CreateTaskResponse(
                 id=local_task.id,
-                status=LocalTaskStatus.PROCESSING,
+                status=TaskStatus.RUNNING,  # LocalTaskStatus.PROCESSING 对应 TaskStatus.RUNNING
                 message="Task created, waiting for Manus webhook callback",
             ),
             message="任务创建成功，等待 Manus 处理",

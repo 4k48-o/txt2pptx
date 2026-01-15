@@ -144,6 +144,10 @@ async def _handle_client_message(client_id: str, raw_data: str):
             "timestamp": datetime.now().isoformat()
         })
         
+    elif action == "pong":
+        # 前端对 ping 的响应，静默接受即可
+        logger.debug(f"收到心跳响应: client_id={client_id}")
+        
     elif action == "stats":
         # 获取连接统计（调试用）
         stats = manager.get_stats()

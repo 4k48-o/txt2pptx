@@ -5,6 +5,7 @@ Tasks API - 任务管理路由
 import logging
 from typing import Optional, List
 from pathlib import Path
+from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -16,11 +17,14 @@ from ..schemas import (
     TaskListResponse,
     TaskListItem,
     TaskProgressResponse,
+    TaskDetailResponse,
     LocalTaskStatus,
+    TaskStatus,
     APIResponse,
 )
 from ..services import TaskTrackerService, PPTGeneratorService
-from ..dependencies import get_task_tracker, get_ppt_generator
+from ..dependencies import get_task_tracker, get_ppt_generator, get_manus_client
+from ..manus_client import AsyncManusClient, AsyncTaskManager
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +77,7 @@ async def create_task(
         success=True,
         data=CreateTaskResponse(
             id=local_task.id,
-            status=LocalTaskStatus.PENDING,
+            status=TaskStatus.PENDING,  # 使用 TaskStatus 而不是 LocalTaskStatus
             message="Task created, processing in background",
         ),
         message="任务创建成功，后台处理中",
@@ -184,6 +188,111 @@ async def get_task_detail(
             "completed_at": task.completed_at,
         },
     )
+
+
+@router.get(
+    "/{task_id}/full",
+    response_model=APIResponse,
+    summary="获取任务完整详情（含所有文件）",
+    description="从 Manus API 获取任务的完整信息，包括所有生成的文件",
+)
+async def get_task_full_detail(
+    task_id: str,
+    tracker: TaskTrackerService = Depends(get_task_tracker),
+    client: AsyncManusClient = Depends(get_manus_client),
+):
+    """获取任务完整详情，包括从 Manus API 获取的所有文件"""
+    from ..schemas import TaskDetailResponse, TaskFile
+    
+    # 获取本地任务
+    local_task = await tracker.get(task_id)
+    if not local_task:
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
+
+    # 如果没有 Manus 任务 ID，只返回本地信息
+    if not local_task.manus_task_id:
+        return APIResponse(
+            success=True,
+            data=TaskDetailResponse(
+                id=local_task.id,
+                status=TaskStatus(local_task.status) if local_task.status in ["pending", "running", "completed", "failed"] else TaskStatus.PENDING,
+                prompt=local_task.prompt,
+                title=local_task.title,
+                task_url=local_task.task_url,
+                credit_usage=local_task.credit_usage,
+                created_at=datetime.fromisoformat(local_task.created_at) if local_task.created_at else None,
+                updated_at=datetime.fromisoformat(local_task.updated_at) if local_task.updated_at else None,
+                local_file_path=local_task.local_file_path,
+            ),
+        )
+
+    # 从 Manus API 获取完整任务信息
+    try:
+        task_manager = AsyncTaskManager(client)
+        manus_task = await task_manager.get_task(local_task.manus_task_id, convert=True)
+        
+        # 提取所有文件
+        files = []
+        output_messages = manus_task.get("output", [])
+        
+        logger.info(f"提取任务文件: task_id={local_task.manus_task_id}, output_messages_count={len(output_messages)}")
+        
+        for message in output_messages:
+            # 支持两种消息格式
+            message_type = message.get("type")
+            if message_type == "message":
+                content_items = message.get("content", [])
+                for content in content_items:
+                    content_type = content.get("type")
+                    if content_type == "output_file":
+                        file_url = content.get("fileUrl") or content.get("file_url")
+                        file_name = content.get("fileName") or content.get("file_name")
+                        mime_type = content.get("mimeType") or content.get("mime_type")
+                        
+                        if file_url and file_name:
+                            files.append(TaskFile(
+                                fileUrl=file_url,
+                                fileName=file_name,
+                                mimeType=mime_type,
+                            ))
+                            logger.debug(f"找到文件: {file_name} ({mime_type})")
+        
+        logger.info(f"提取到 {len(files)} 个文件")
+        
+        # 构建响应
+        return APIResponse(
+            success=True,
+            data=TaskDetailResponse(
+                id=local_task.id,
+                status=TaskStatus(manus_task.get("status", local_task.status)),
+                prompt=local_task.prompt,
+                title=manus_task.get("metadata", {}).get("task_title") or local_task.title,
+                task_url=manus_task.get("metadata", {}).get("task_url") or local_task.task_url,
+                credit_usage=manus_task.get("credit_usage") or local_task.credit_usage,
+                created_at=datetime.fromtimestamp(manus_task.get("created_at", 0)) if manus_task.get("created_at") else (datetime.fromisoformat(local_task.created_at) if local_task.created_at else None),
+                updated_at=datetime.fromtimestamp(manus_task.get("updated_at", 0)) if manus_task.get("updated_at") else (datetime.fromisoformat(local_task.updated_at) if local_task.updated_at else None),
+                files=files,
+                output=output_messages,
+                local_file_path=local_task.local_file_path,
+            ),
+        )
+    except Exception as e:
+        logger.error(f"Failed to get task detail from Manus API: {e}")
+        # 如果 Manus API 调用失败，返回本地信息
+        return APIResponse(
+            success=True,
+            data=TaskDetailResponse(
+                id=local_task.id,
+                status=TaskStatus(local_task.status) if local_task.status in ["pending", "running", "completed", "failed"] else TaskStatus.PENDING,
+                prompt=local_task.prompt,
+                title=local_task.title,
+                task_url=local_task.task_url,
+                credit_usage=local_task.credit_usage,
+                created_at=datetime.fromisoformat(local_task.created_at) if local_task.created_at else None,
+                updated_at=datetime.fromisoformat(local_task.updated_at) if local_task.updated_at else None,
+                local_file_path=local_task.local_file_path,
+            ),
+        )
 
 
 @router.get(

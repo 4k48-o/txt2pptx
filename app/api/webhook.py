@@ -21,15 +21,76 @@ router = APIRouter(prefix="/webhook", tags=["Webhook"])
 
 # ========== Webhook Payload 模型 ==========
 
-class ManusWebhookPayload(BaseModel):
-    """Manus Webhook 回调数据结构"""
-    event_id: str
-    event_type: str  # task_created, task_state_change
+class TaskDetail(BaseModel):
+    """任务详情（用于 task_created 和 task_stopped 事件）"""
     task_id: str
     task_title: Optional[str] = None
     task_url: Optional[str] = None
-    status: Optional[str] = None  # pending, running, completed, failed
     message: Optional[str] = None
+    status: Optional[str] = None
+    attachments: Optional[list] = None
+    stop_reason: Optional[str] = None  # finish, ask
+
+
+class ProgressDetail(BaseModel):
+    """进度详情（用于 task_progress 事件）"""
+    task_id: str
+    progress_type: Optional[str] = None  # plan_update
+    message: Optional[str] = None
+
+
+class ManusWebhookPayload(BaseModel):
+    """Manus Webhook 回调数据结构（支持嵌套结构）"""
+    event_id: str
+    event_type: str  # task_created, task_progress, task_stopped
+    
+    # 嵌套结构（根据事件类型，可能包含其中一个）
+    task_detail: Optional[TaskDetail] = None
+    progress_detail: Optional[ProgressDetail] = None
+    
+    # 兼容扁平结构（向后兼容）
+    task_id: Optional[str] = None
+    task_title: Optional[str] = None
+    task_url: Optional[str] = None
+    status: Optional[str] = None
+    message: Optional[str] = None
+    
+    def get_task_id(self) -> str:
+        """获取 task_id（优先从嵌套结构）"""
+        if self.task_detail:
+            return self.task_detail.task_id
+        elif self.progress_detail:
+            return self.progress_detail.task_id
+        elif self.task_id:
+            return self.task_id
+        else:
+            raise ValueError("无法找到 task_id")
+    
+    def get_task_title(self) -> Optional[str]:
+        """获取 task_title"""
+        if self.task_detail:
+            return self.task_detail.task_title
+        return self.task_title
+    
+    def get_task_url(self) -> Optional[str]:
+        """获取 task_url"""
+        if self.task_detail:
+            return self.task_detail.task_url
+        return self.task_url
+    
+    def get_status(self) -> Optional[str]:
+        """获取 status"""
+        if self.task_detail:
+            return self.task_detail.status
+        return self.status
+    
+    def get_message(self) -> Optional[str]:
+        """获取 message"""
+        if self.task_detail:
+            return self.task_detail.message
+        elif self.progress_detail:
+            return self.progress_detail.message
+        return self.message
 
 
 # ========== Webhook 端点 ==========
@@ -37,7 +98,6 @@ class ManusWebhookPayload(BaseModel):
 @router.post("/manus")
 async def manus_webhook(
     request: Request,
-    payload: ManusWebhookPayload,
     background_tasks: BackgroundTasks
 ):
     """
@@ -49,17 +109,46 @@ async def manus_webhook(
     
     事件类型：
     - task_created: 任务创建成功
-    - task_state_change: 任务状态变化（running/completed/failed）
+    - task_progress: 任务进度更新
+    - task_stopped: 任务停止（完成或需要输入）
     """
-    logger.info(f"收到 Manus Webhook: event_type={payload.event_type}, task_id={payload.task_id}")
-    
-    # 立即返回 200，在后台处理
-    background_tasks.add_task(
-        handle_webhook_event,
-        payload
-    )
-    
-    return {"status": "ok", "received": True}
+    try:
+        # 先读取原始请求体，用于调试
+        raw_body = await request.body()
+        logger.info(f"[Webhook] 收到原始请求体: {raw_body.decode('utf-8')[:500]}")
+        
+        # 尝试解析 JSON
+        import json
+        try:
+            raw_data = json.loads(raw_body)
+            logger.info(f"[Webhook] 解析后的 JSON 数据: {json.dumps(raw_data, ensure_ascii=False, indent=2)[:1000]}")
+        except json.JSONDecodeError as e:
+            logger.error(f"[Webhook] JSON 解析失败: {e}, 原始数据: {raw_body[:200]}")
+            return {"status": "error", "message": "Invalid JSON"}, 400
+        
+        # 尝试解析为 Pydantic 模型
+        try:
+            payload = ManusWebhookPayload(**raw_data)
+            logger.info(f"[Webhook] Pydantic 验证成功: event_type={payload.event_type}, task_id={payload.task_id}")
+        except Exception as e:
+            logger.error(f"[Webhook] Pydantic 验证失败: {e}")
+            logger.error(f"[Webhook] 原始数据键: {list(raw_data.keys()) if isinstance(raw_data, dict) else 'not dict'}")
+            logger.error(f"[Webhook] 错误详情: {str(e)}")
+            # 返回 200 避免 Manus 重试，但记录错误
+            return {"status": "ok", "received": False, "error": "validation failed"}
+        
+        # 立即返回 200，在后台处理
+        background_tasks.add_task(
+            handle_webhook_event,
+            payload
+        )
+        
+        return {"status": "ok", "received": True}
+        
+    except Exception as e:
+        logger.error(f"[Webhook] 处理请求异常: {e}", exc_info=True)
+        # 即使出错也返回 200，避免 Manus 重试
+        return {"status": "error", "message": str(e)}
 
 
 async def handle_webhook_event(payload: ManusWebhookPayload):
@@ -67,145 +156,193 @@ async def handle_webhook_event(payload: ManusWebhookPayload):
     后台处理 Webhook 事件
     """
     try:
+        task_id = payload.get_task_id()
+        logger.info(f"[Webhook] 开始处理事件: event_type={payload.event_type}, task_id={task_id}")
+        
         tracker = get_task_tracker()
         
         # 记录 Webhook 事件到任务
         event = await tracker.add_webhook_event(
-            task_id=payload.task_id,
+            task_id=task_id,
             event_id=payload.event_id,
             event_type=payload.event_type,
-            status=payload.status,
-            message=payload.message,
+            status=payload.get_status(),
+            message=payload.get_message(),
             raw_payload={
-                "task_id": payload.task_id,
-                "task_title": payload.task_title,
-                "task_url": payload.task_url,
-                "status": payload.status,
-                "message": payload.message,
+                "task_id": task_id,
+                "task_title": payload.get_task_title(),
+                "task_url": payload.get_task_url(),
+                "status": payload.get_status(),
+                "message": payload.get_message(),
             }
         )
+        logger.info(f"[Webhook] 事件已记录: event_id={payload.event_id}")
         
         # 推送事件到所有订阅者
-        await manager.send_to_task_subscribers(payload.task_id, {
+        await manager.send_to_task_subscribers(task_id, {
             "type": "webhook_event",
             "event_id": payload.event_id,
             "event_type": payload.event_type,
-            "task_id": payload.task_id,
-            "status": payload.status,
-            "message": payload.message,
+            "task_id": task_id,
+            "status": payload.get_status(),
+            "message": payload.get_message(),
             "timestamp": datetime.now().isoformat()
         })
+        logger.info(f"[Webhook] 事件已推送给订阅者")
         
         # 根据事件类型处理
         if payload.event_type == "task_created":
+            logger.info(f"[Webhook] 处理 task_created 事件")
             await handle_task_created(payload, tracker)
             
-        elif payload.event_type == "task_state_change":
-            await handle_task_state_change(payload, tracker)
+        elif payload.event_type == "task_progress":
+            logger.info(f"[Webhook] 处理 task_progress 事件")
+            await handle_task_progress(payload, tracker)
+            
+        elif payload.event_type == "task_stopped":
+            logger.info(f"[Webhook] 处理 task_stopped 事件")
+            await handle_task_stopped(payload, tracker)
             
         else:
-            logger.warning(f"未知的 Webhook 事件类型: {payload.event_type}")
+            logger.warning(f"[Webhook] 未知的 Webhook 事件类型: {payload.event_type}")
             
     except Exception as e:
-        logger.error(f"处理 Webhook 事件失败: {e}")
+        logger.error(f"[Webhook] 处理 Webhook 事件失败: {e}", exc_info=True)
 
 
 async def handle_task_created(payload: ManusWebhookPayload, tracker):
     """处理任务创建事件"""
-    logger.info(f"任务已创建: task_id={payload.task_id}, title={payload.task_title}")
+    task_id = payload.get_task_id()
+    task_title = payload.get_task_title()
+    task_url = payload.get_task_url()
+    
+    logger.info(f"[Webhook] 任务已创建: task_id={task_id}, title={task_title}")
     
     # 更新本地任务状态
-    local_task = await tracker.find_by_manus_task_id(payload.task_id)
+    local_task = await tracker.find_by_manus_task_id(task_id)
     if local_task:
+        logger.info(f"[Webhook] 找到本地任务: {local_task['id']}, 更新状态")
         await tracker.update(
             local_task["id"],
-            title=payload.task_title,
-            task_url=payload.task_url,
+            title=task_title,
+            task_url=task_url,
             status="processing"
         )
+    else:
+        logger.warning(f"[Webhook] 未找到本地任务: task_id={task_id}")
     
     # 通过 WebSocket 通知前端
-    await manager.send_to_task_subscribers(payload.task_id, {
+    await manager.send_to_task_subscribers(task_id, {
         "type": "task_created",
-        "task_id": payload.task_id,
-        "title": payload.task_title,
-        "task_url": payload.task_url,
+        "task_id": task_id,
+        "title": task_title,
+        "task_url": task_url,
         "message": "任务已创建，正在处理中...",
         "timestamp": datetime.now().isoformat()
     })
 
 
-async def handle_task_state_change(payload: ManusWebhookPayload, tracker):
-    """处理任务状态变化事件"""
-    logger.info(f"任务状态变化: task_id={payload.task_id}, status={payload.status}")
+async def handle_task_progress(payload: ManusWebhookPayload, tracker):
+    """处理任务进度事件"""
+    task_id = payload.get_task_id()
+    message = payload.get_message()
     
-    local_task = await tracker.find_by_manus_task_id(payload.task_id)
+    logger.info(f"[Webhook] 任务进度更新: task_id={task_id}, message={message}")
     
-    if payload.status == "running":
-        # 任务运行中
-        if local_task:
-            await tracker.update(local_task["id"], status="processing")
-        
-        await manager.send_to_task_subscribers(payload.task_id, {
-            "type": "task_update",
-            "task_id": payload.task_id,
-            "status": "running",
-            "message": "PPT 正在生成中...",
-            "timestamp": datetime.now().isoformat()
-        })
-        
-    elif payload.status == "completed":
+    # 通过 WebSocket 通知前端
+    await manager.send_to_task_subscribers(task_id, {
+        "type": "task_progress",
+        "task_id": task_id,
+        "message": message,
+        "timestamp": datetime.now().isoformat()
+    })
+
+
+async def handle_task_stopped(payload: ManusWebhookPayload, tracker):
+    """处理任务停止事件（完成或需要输入）"""
+    task_id = payload.get_task_id()
+    task_title = payload.get_task_title()
+    status = payload.get_status()
+    message = payload.get_message()
+    stop_reason = payload.task_detail.stop_reason if payload.task_detail else None
+    
+    logger.info(f"[Webhook] 任务停止: task_id={task_id}, status={status}, stop_reason={stop_reason}")
+    
+    local_task = await tracker.find_by_manus_task_id(task_id)
+    
+    if stop_reason == "finish":
         # 任务完成 - 触发下载
-        logger.info(f"任务完成，开始下载 PPTX: task_id={payload.task_id}")
+        logger.info(f"[Webhook] 任务完成，开始下载 PPTX: task_id={task_id}")
         
         if local_task:
             # 异步下载 PPTX
             try:
                 ppt_generator = await get_ppt_generator()
-                await ppt_generator.download_completed_task(payload.task_id)
+                await ppt_generator.download_completed_task(task_id)
                 
                 # 重新获取更新后的任务信息
                 updated_task = await tracker.get(local_task["id"])
                 
-                await manager.send_to_task_subscribers(payload.task_id, {
+                await manager.send_to_task_subscribers(task_id, {
                     "type": "task_completed",
-                    "task_id": payload.task_id,
+                    "task_id": task_id,
                     "local_task_id": local_task["id"],
-                    "title": (updated_task.title if updated_task else None) or payload.task_title,
+                    "title": (updated_task.title if updated_task else None) or task_title,
                     "download_url": f"/api/tasks/{local_task['id']}/download",
                     "message": "PPT 生成完成！",
                     "timestamp": datetime.now().isoformat()
                 })
+                logger.info(f"[Webhook] 任务完成通知已发送")
             except Exception as e:
-                logger.error(f"下载 PPTX 失败: {e}")
-                await manager.send_to_task_subscribers(payload.task_id, {
+                logger.error(f"[Webhook] 下载 PPTX 失败: {e}", exc_info=True)
+                await manager.send_to_task_subscribers(task_id, {
                     "type": "task_failed",
-                    "task_id": payload.task_id,
+                    "task_id": task_id,
                     "error": f"下载失败: {str(e)}",
                     "timestamp": datetime.now().isoformat()
                 })
         else:
-            await manager.send_to_task_subscribers(payload.task_id, {
+            logger.warning(f"[Webhook] 任务完成但未找到本地任务: task_id={task_id}")
+            await manager.send_to_task_subscribers(task_id, {
                 "type": "task_completed",
-                "task_id": payload.task_id,
-                "title": payload.task_title,
+                "task_id": task_id,
+                "title": task_title,
                 "message": "PPT 生成完成！",
                 "timestamp": datetime.now().isoformat()
             })
         
-    elif payload.status == "failed":
-        # 任务失败
+    elif stop_reason == "ask":
+        # 需要用户输入
+        logger.info(f"[Webhook] 任务需要用户输入: task_id={task_id}")
+        
+        if local_task:
+            await tracker.update(
+                local_task["id"],
+                status="pending"
+            )
+        
+        await manager.send_to_task_subscribers(task_id, {
+            "type": "task_ask",
+            "task_id": task_id,
+            "message": message or "任务需要您的输入",
+            "timestamp": datetime.now().isoformat()
+        })
+        
+    else:
+        # 其他情况（可能是失败）
+        logger.warning(f"[Webhook] 未知的 stop_reason: {stop_reason}, task_id={task_id}")
+        
         if local_task:
             await tracker.update(
                 local_task["id"],
                 status="failed",
-                error=payload.message or "任务执行失败"
+                error=message or "任务执行失败"
             )
         
-        await manager.send_to_task_subscribers(payload.task_id, {
+        await manager.send_to_task_subscribers(task_id, {
             "type": "task_failed",
-            "task_id": payload.task_id,
-            "error": payload.message or "任务执行失败",
+            "task_id": task_id,
+            "error": message or "任务执行失败",
             "timestamp": datetime.now().isoformat()
         })
 

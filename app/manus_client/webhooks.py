@@ -32,7 +32,11 @@ class AsyncWebhookManager:
         
         response = await self.client.post(
             "/v1/webhooks",
-            json={"url": url}
+            data={
+                "webhook": {
+                    "url": url
+                }
+            }
         )
         
         webhook_id = response.get("webhook_id") or response.get("id")
