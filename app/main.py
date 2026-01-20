@@ -48,8 +48,12 @@ async def lifespan(app: FastAPI):
             from .manus_client import AsyncManusClient
             manus_client = AsyncManusClient()
             webhook_id = await register_webhook_on_startup(manus_client)
-            if webhook_id:
-                logger.info(f"Webhook 注册成功: {settings.webhook_base_url}{settings.webhook_path}")
+            if webhook_id is not None:
+                # webhook_id 可能为空字符串（表示已存在但无法获取 id）或实际的 webhook_id
+                if webhook_id:
+                    logger.info(f"Webhook 注册成功: {settings.webhook_base_url}{settings.webhook_path}, webhook_id={webhook_id}")
+                else:
+                    logger.info(f"Webhook 已存在: {settings.webhook_base_url}{settings.webhook_path}")
             else:
                 logger.warning("Webhook 注册失败")
         else:
@@ -91,7 +95,28 @@ app.add_middleware(
 # 注册全局异常处理
 setup_exception_handlers(app)
 
-# 注册路由
+# 静态文件目录
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+
+# 根路径 - 返回前端页面（必须在其他路由之前注册，确保优先级）
+@app.get("/")
+async def root():
+    """根路径，返回前端页面（新版本，Webhook 模式）"""
+    index_file = STATIC_DIR / "index2.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+    # 如果 index2.html 不存在，回退到 index.html
+    fallback_file = STATIC_DIR / "index.html"
+    if fallback_file.exists():
+        return FileResponse(fallback_file)
+    return {
+        "name": "Manus PPT Generator API",
+        "version": "0.2.0",
+        "docs": "/docs",
+        "health": "/api/health",
+    }
+
+# 注册路由（在根路径之后注册，避免覆盖）
 app.include_router(api_router)
 
 # 注册 WebSocket 路由
@@ -99,24 +124,6 @@ app.include_router(websocket_router)
 
 # 注册 Webhook 路由
 app.include_router(webhook_router)
-
-# 静态文件目录
-STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
-
-
-# 根路径 - 返回前端页面
-@app.get("/")
-async def root():
-    """根路径，返回前端页面（轮询模式）"""
-    index_file = STATIC_DIR / "index.html"
-    if index_file.exists():
-        return FileResponse(index_file)
-    return {
-        "name": "Manus PPT Generator API",
-        "version": "0.2.0",
-        "docs": "/docs",
-        "health": "/api/health",
-    }
 
 
 @app.get("/realtime")
@@ -135,6 +142,15 @@ async def tasks_page():
     if tasks_file.exists():
         return FileResponse(tasks_file)
     return {"error": "tasks.html not found"}
+
+
+@app.get("/video")
+async def video_page():
+    """视频生成页面"""
+    video_file = STATIC_DIR / "video.html"
+    if video_file.exists():
+        return FileResponse(video_file)
+    return {"error": "video.html not found"}
 
 
 # 挂载静态文件（放在最后，避免覆盖其他路由）

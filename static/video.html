@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Creative Studio - Video Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    
+    <!-- 配置Tailwind自定义主题 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2563eb',
+                        secondary: '#f3f4f6',
+                        accent: '#8b5cf6',
+                        neutral: '#f9fafb',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        'soft': '0 2px 15px 0 rgba(0, 0, 0, 0.05)',
+                    }
+                },
+            }
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .input-focus {
+                @apply focus:ring-2 focus:ring-primary/20 focus:border-primary focus:outline-none;
+            }
+            .card-hover {
+                @apply hover:shadow-md hover:-translate-y-1 transition-all duration-200;
+            }
+        }
+        
+        /* 时间轴样式 */
+        .timeline {
+            position: relative;
+            padding-left: 2rem;
+        }
+        
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 0.5rem;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #e5e7eb;
+        }
+        
+        .timeline-item {
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+        
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -1.75rem;
+            top: 0.25rem;
+            width: 0.75rem;
+            height: 0.75rem;
+            border-radius: 50%;
+            background: #2563eb;
+            border: 2px solid white;
+            box-shadow: 0 0 0 2px #2563eb;
+        }
+        
+        .timeline-item.completed::before {
+            background: #10b981;
+            box-shadow: 0 0 0 2px #10b981;
+        }
+        
+        .timeline-item.error::before {
+            background: #ef4444;
+            box-shadow: 0 0 0 2px #ef4444;
+        }
+        
+        .timeline-item.progress::before {
+            background: #8b5cf6; /* purple-500 */
+            box-shadow: 0 0 0 2px #8b5cf6;
+            animation: pulse 2s infinite;
+        }
+        
+        /* 执行中的呼吸光影效果 - 只应用于最新的 progress 项 */
+        .timeline-item.progress.active > div {
+            position: relative;
+            overflow: hidden;
+            animation: breathe 2s ease-in-out infinite;
+        }
+        
+        .timeline-item.progress.active > div::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                135deg,
+                rgba(139, 92, 246, 0.1),
+                rgba(139, 92, 246, 0.2),
+                rgba(139, 92, 246, 0.1)
+            );
+            border-radius: 0.5rem; /* 与 rounded-lg 保持一致 */
+            animation: breathe-glow 2s ease-in-out infinite;
+            pointer-events: none;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        @keyframes breathe {
+            0%, 100% {
+                box-shadow: 0 0 5px rgba(139, 92, 246, 0.2),
+                            0 0 10px rgba(139, 92, 246, 0.15),
+                            0 0 15px rgba(139, 92, 246, 0.1);
+            }
+            50% {
+                box-shadow: 0 0 10px rgba(139, 92, 246, 0.4),
+                            0 0 20px rgba(139, 92, 246, 0.3),
+                            0 0 30px rgba(139, 92, 246, 0.2);
+            }
+        }
+        
+        @keyframes breathe-glow {
+            0%, 100% {
+                opacity: 0.3;
+            }
+            50% {
+                opacity: 0.6;
+            }
+        }
+        
+        /* 左侧内容区域动画 */
+        .left-content-area {
+            transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            flex: 1 1 100%;
+            min-width: 0;
+        }
+        
+        .left-content-area.compact {
+            flex: 1 1 66.666667%; /* 2/3 宽度 */
+        }
+        
+        /* 左侧内容内部区域，初始居中，compact 后左对齐 */
+        #leftContentInner {
+            transition: margin 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .left-content-area.compact #leftContentInner {
+            margin-left: 0;
+            margin-right: 0;
+        }
+        
+        /* Activity Timeline 面板动画 */
+        .timeline-panel {
+            flex: 0 0 0;
+            transform: translateX(100%);
+            opacity: 0;
+            overflow: hidden;
+            transition: flex 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+                        transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), 
+                        opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .timeline-panel.show {
+            flex: 0 0 33.333333%; /* 1/3 宽度 */
+            transform: translateX(0);
+            opacity: 1;
+        }
+        
+        /* 移动端：从下方滑入 */
+        @media (max-width: 1024px) {
+            .left-content-area.compact {
+                flex: 1 1 100%;
+            }
+            
+            .timeline-panel {
+                flex: 0 0 0;
+                transform: translateY(100%);
+                max-height: 0;
+            }
+            
+            .timeline-panel.show {
+                flex: 0 0 auto;
+                transform: translateY(0);
+                max-height: 1000px;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-7xl">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-8">
+            <h1 class="text-3xl font-bold bg-gradient-to-r from-purple-500 to-purple-600 bg-clip-text text-transparent" style="text-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);">
+                CreativeStudio
+            </h1>
+            <span class="text-sm text-gray-600 bg-gradient-to-r from-purple-500 to-purple-600 bg-clip-text text-transparent font-medium">
+                Start Free Trial
+            </span>
+        </div>
+
+        <!-- Main Content Area (Flex Layout) -->
+        <div class="flex gap-6 flex-col lg:flex-row">
+            <!-- Left Content Area -->
+            <div id="leftContentArea" class="left-content-area">
+                <div id="leftContentInner" class="max-w-2xl w-full">
+                    <!-- Main Title -->
+                    <h2 class="text-4xl font-bold text-center mb-8 bg-gradient-to-r from-purple-500 to-purple-600 bg-clip-text text-transparent" style="text-shadow: 0 2px 12px rgba(139, 92, 246, 0.3);">
+                        What video can I create for you?
+                    </h2>
+
+                    <!-- Prompt Input -->
+                    <div class="mb-6">
+                        <textarea
+                            id="topicInput"
+                            rows="4"
+                            placeholder="Describe the video you want to create... (e.g., Introduction to Artificial Intelligence)"
+                            class="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white shadow-soft input-focus resize-none text-gray-800 placeholder-gray-400"
+                        ></textarea>
+                        <div id="topicError" class="hidden mt-2 text-sm text-red-500"></div>
+                    </div>
+
+                    <!-- Video Settings -->
+                    <div class="bg-white rounded-xl shadow-soft p-6 mb-6">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Video Settings</h3>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <!-- Duration -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Duration (seconds)</label>
+                                <div class="relative">
+                                    <select id="durationSelect" class="w-full px-4 py-2 pr-8 rounded-lg border border-gray-300 bg-white appearance-none input-focus text-gray-800">
+                                        <option value="5">5</option>
+                                        <option value="10">10</option>
+                                        <option value="15" selected>15</option>
+                                        <option value="20">20</option>
+                                        <option value="25">25</option>
+                                        <option value="30">30</option>
+                                    </select>
+                                    <i class="fa fa-caret-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-xs"></i>
+                                </div>
+                            </div>
+
+                            <!-- Style -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Style</label>
+                                <div class="relative">
+                                    <i id="styleSelectIcon" class="fa fa-film absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none"></i>
+                                    <select id="styleSelect" class="w-full px-4 py-2 pl-10 pr-8 rounded-lg border border-gray-300 bg-white appearance-none input-focus text-gray-800" onchange="updateStyleIcon()">
+                                        <option value="educational">Educational</option>
+                                        <option value="promotional">Promotional</option>
+                                        <option value="documentary">Documentary</option>
+                                        <option value="tutorial">Tutorial</option>
+                                        <option value="corporate">Corporate</option>
+                                    </select>
+                                    <i class="fa fa-caret-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-xs"></i>
+                                </div>
+                            </div>
+
+                            <!-- Audience -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Audience</label>
+                                <div class="relative">
+                                    <select id="audienceSelect" class="w-full px-4 py-2 pr-8 rounded-lg border border-gray-300 bg-white appearance-none input-focus text-gray-800">
+                                        <option value="general">General Public</option>
+                                        <option value="students">Students</option>
+                                        <option value="professionals">Professionals</option>
+                                        <option value="executives">Executives</option>
+                                    </select>
+                                    <i class="fa fa-caret-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-xs"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Generate Button -->
+                    <button
+                        id="generateBtn"
+                        onclick="generateVideo()"
+                        class="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-semibold shadow-lg transition-all duration-200 transform hover:scale-105 mb-6"
+                    >
+                        <i class="fa fa-video-camera mr-2"></i>
+                        Generate Video
+                    </button>
+
+                    <!-- Download Button (Initially Hidden) -->
+                    <button
+                        id="downloadBtn"
+                        onclick="downloadVideo()"
+                        class="hidden w-full py-4 px-6 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-semibold shadow-lg transition-all duration-200 transform hover:scale-105 mb-6"
+                    >
+                        <i class="fa fa-download mr-2"></i>
+                        Download Video
+                    </button>
+
+                    <!-- Example Prompts -->
+                    <div class="bg-white rounded-xl shadow-soft p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-semibold text-gray-800">Example Topics</h3>
+                            <button
+                                id="refreshPromptsBtn"
+                                onclick="refreshExamplePrompts()"
+                                class="text-gray-500 hover:text-purple-600 transition-colors"
+                                title="Refresh examples"
+                            >
+                                <i class="fa fa-refresh"></i>
+                            </button>
+                        </div>
+                        <div id="examplePromptsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <!-- 示例提示词将动态加载 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activity Timeline Panel (Initially Hidden) -->
+            <div id="timelinePanel" class="timeline-panel bg-white rounded-xl shadow-soft p-6">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">Activity Timeline</h3>
+                <div id="wsStatus" class="text-xs text-gray-500 mb-4">
+                    <i class="fa fa-circle text-gray-400"></i> Connecting...
+                </div>
+                <div id="timelineContainer" class="timeline">
+                    <!-- Timeline items will be added here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+        let currentTaskId = null;
+        let clientId = null;
+        let ws = null;
+        let wsReconnectTimer = null;
+        let mockMode = false;
+        
+        // Mock 模式开关（通过 URL 参数 ?mock=true 启用）
+        const urlParams = new URLSearchParams(window.location.search);
+        const USE_MOCK_DATA = urlParams.get('mock') === 'true';
+        
+        console.log('[Video App] Mock 模式状态:', USE_MOCK_DATA, 'URL参数:', window.location.search);
+        
+        // 样式图标映射
+        const styleIcons = {
+            'educational': 'graduation-cap',
+            'promotional': 'bullhorn',
+            'documentary': 'film',
+            'tutorial': 'book',
+            'corporate': 'briefcase'
+        };
+
+        // 更新样式选择框图标
+        function updateStyleIcon() {
+            const select = document.getElementById('styleSelect');
+            const icon = document.getElementById('styleSelectIcon');
+            const selectedValue = select.value;
+            const iconName = styleIcons[selectedValue] || 'film';
+            icon.className = `fa fa-${iconName} absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none`;
+        }
+
+        // 显示 Activity Timeline 面板（带动画）
+        function showTimelinePanel() {
+            const panel = document.getElementById('timelinePanel');
+            const leftArea = document.getElementById('leftContentArea');
+            
+            if (panel && !panel.classList.contains('show')) {
+                if (leftArea) {
+                    leftArea.classList.add('compact');
+                }
+                
+                setTimeout(() => {
+                    panel.classList.add('show');
+                }, 100);
+            }
+        }
+
+        // 多组示例主题
+        const exampleTopicsGroups = [
+            [
+                'Introduction to Artificial Intelligence',
+                'How to Start a Successful Business',
+                'Climate Change and Its Impact',
+                'The Future of Remote Work'
+            ],
+            [
+                'Understanding Machine Learning Basics',
+                'Digital Marketing Strategies for 2024',
+                'Sustainable Energy Solutions',
+                'Effective Team Communication'
+            ],
+            [
+                'Cybersecurity Best Practices',
+                'Personal Finance Management',
+                'Healthy Lifestyle Tips',
+                'Innovation in Technology'
+            ],
+            [
+                'Leadership Development Skills',
+                'Productivity Hacks for Professionals',
+                'Social Media Marketing Guide',
+                'Mental Health Awareness'
+            ],
+            [
+                'Data Science Fundamentals',
+                'Entrepreneurship Essentials',
+                'Environmental Conservation',
+                'Career Development Strategies'
+            ]
+        ];
+        
+        let currentTopicsGroupIndex = 0;
+        
+        // 渲染示例主题
+        function renderExampleTopics() {
+            const container = document.getElementById('examplePromptsContainer');
+            if (!container) return;
+            
+            const topics = exampleTopicsGroups[currentTopicsGroupIndex];
+            container.innerHTML = topics.map(topic => {
+                const escapedTopic = topic.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                return `
+                    <div class="bg-white rounded-xl shadow-soft p-4 card-hover cursor-pointer" onclick="fillExample('${escapedTopic}')">
+                        <p class="text-gray-700 text-sm">${topic}</p>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // 刷新示例主题（切换到下一组）
+        window.refreshExamplePrompts = function() {
+            currentTopicsGroupIndex = (currentTopicsGroupIndex + 1) % exampleTopicsGroups.length;
+            renderExampleTopics();
+            
+            const refreshBtn = document.getElementById('refreshPromptsBtn');
+            if (refreshBtn) {
+                const icon = refreshBtn.querySelector('i');
+                if (icon) {
+                    icon.style.transition = 'transform 0.5s ease';
+                    icon.style.transform = 'rotate(360deg)';
+                    setTimeout(() => {
+                        icon.style.transform = 'rotate(0deg)';
+                    }, 500);
+                }
+            }
+        };
+        
+        // 填充示例主题（全局函数）
+        window.fillExample = function(text) {
+            document.getElementById('topicInput').value = text;
+            // 清除错误消息
+            const errorDiv = document.getElementById('topicError');
+            if (errorDiv) {
+                errorDiv.classList.add('hidden');
+            }
+        };
+
+        // 初始化 WebSocket
+        function initWebSocket() {
+            if (USE_MOCK_DATA) {
+                initMockWebSocket();
+                return;
+            }
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            
+            console.log('[WebSocket] 连接中:', wsUrl);
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                console.log('[WebSocket] 连接成功');
+                clientId = ws.url.split('/').pop();
+                updateWSStatus(true, 'Connected');
+                
+                // 发送订阅消息
+                if (currentTaskId) {
+                    ws.send(JSON.stringify({
+                        action: 'subscribe',
+                        task_id: currentTaskId
+                    }));
+                }
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleWebSocketMessage(data);
+                } catch (e) {
+                    console.error('[WebSocket] 解析消息失败:', e);
+                }
+            };
+            
+            ws.onerror = (error) => {
+                console.error('[WebSocket] 错误:', error);
+                updateWSStatus(false, 'Connection Error');
+            };
+            
+            ws.onclose = () => {
+                console.log('[WebSocket] 连接关闭');
+                updateWSStatus(false, 'Disconnected');
+                
+                // 自动重连
+                if (wsReconnectTimer) {
+                    clearTimeout(wsReconnectTimer);
+                }
+                wsReconnectTimer = setTimeout(() => {
+                    console.log('[WebSocket] 尝试重连...');
+                    initWebSocket();
+                }, 3000);
+            };
+        }
+
+        // 更新 WebSocket 状态显示
+        function updateWSStatus(connected, message) {
+            const statusDiv = document.getElementById('wsStatus');
+            if (statusDiv) {
+                const icon = connected ? 'fa-check-circle text-green-500' : 'fa-times-circle text-red-500';
+                statusDiv.innerHTML = `<i class="fa ${icon}"></i> ${message}`;
+            }
+        }
+
+        // 处理 WebSocket 消息
+        function handleWebSocketMessage(data) {
+            console.log('[WebSocket] 收到消息:', data);
+            
+            switch (data.type) {
+                case 'connected':
+                    updateWSStatus(true, 'Connected');
+                    break;
+                    
+                case 'script_generation_progress':
+                case 'video_generation_progress':
+                    addTimelineItem('progress', data.message || 'Processing...', data.timestamp);
+                    break;
+                    
+                case 'script_generation_completed':
+                    addTimelineItem('completed', 'Script generation completed', data.timestamp);
+                    if (data.video_task_id) {
+                        // 订阅视频生成任务
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({
+                                action: 'subscribe',
+                                task_id: data.video_task_id
+                            }));
+                        }
+                    }
+                    break;
+                    
+                case 'video_generation_started':
+                    addTimelineItem('progress', 'Video generation started', data.timestamp);
+                    break;
+                    
+                case 'video_generation_completed':
+                    addTimelineItem('completed', 'Video generation completed!', data.timestamp);
+                    showDownloadButton(data.download_url);
+                    break;
+                    
+                case 'script_generation_failed':
+                case 'video_generation_failed':
+                case 'task_failed':
+                    addTimelineItem('error', data.error || 'Task failed', data.timestamp);
+                    break;
+                    
+                default:
+                    console.log('[WebSocket] 未知消息类型:', data.type);
+            }
+        }
+
+        // 添加时间轴项
+        function addTimelineItem(status, message, timestamp) {
+            const container = document.getElementById('timelineContainer');
+            if (!container) return;
+            
+            // 移除所有 progress 项的 active 类
+            removeAllProgressEffects();
+            
+            const item = document.createElement('div');
+            item.className = `timeline-item ${status}`;
+            if (status === 'progress') {
+                item.classList.add('active');
+            }
+            
+            const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+            
+            item.innerHTML = `
+                <div class="bg-gray-50 rounded-lg p-3">
+                    <p class="text-sm text-gray-700">${message}</p>
+                    <p class="text-xs text-gray-500 mt-1">${time}</p>
+                </div>
+            `;
+            
+            container.appendChild(item);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // 移除所有 progress 效果
+        function removeAllProgressEffects() {
+            const progressItems = document.querySelectorAll('.timeline-item.progress');
+            progressItems.forEach(item => {
+                item.classList.remove('active');
+            });
+        }
+
+        // 显示下载按钮
+        function showDownloadButton(downloadUrl) {
+            const downloadBtn = document.getElementById('downloadBtn');
+            const generateBtn = document.getElementById('generateBtn');
+            
+            if (downloadBtn) {
+                downloadBtn.classList.remove('hidden');
+                downloadBtn.setAttribute('data-url', downloadUrl || '');
+            }
+            
+            if (generateBtn) {
+                generateBtn.disabled = true;
+                generateBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        // 生成视频
+        window.generateVideo = async function() {
+            const topic = document.getElementById('topicInput').value.trim();
+            const duration = parseInt(document.getElementById('durationSelect').value);
+            const style = document.getElementById('styleSelect').value;
+            const audience = document.getElementById('audienceSelect').value;
+            const errorDiv = document.getElementById('topicError');
+            
+            // 验证输入
+            if (!topic) {
+                if (errorDiv) {
+                    errorDiv.textContent = 'Please enter a video topic';
+                    errorDiv.classList.remove('hidden');
+                }
+                return;
+            }
+            
+            // 清除错误消息
+            if (errorDiv) {
+                errorDiv.classList.add('hidden');
+            }
+            
+            // 显示时间轴面板
+            showTimelinePanel();
+            
+            // 初始化 WebSocket（如果尚未连接）
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                initWebSocket();
+            }
+            
+            // 禁用生成按钮
+            const generateBtn = document.getElementById('generateBtn');
+            if (generateBtn) {
+                generateBtn.disabled = true;
+                generateBtn.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i> Generating...';
+            }
+            
+            try {
+                if (USE_MOCK_DATA) {
+                    // Mock 模式
+                    console.log('[Mock] 创建视频生成任务...');
+                    currentTaskId = 'mock_video_task_' + Date.now();
+                    
+                    setTimeout(() => {
+                        addTimelineItem('progress', 'Script generation started', new Date().toISOString());
+                        startMockWebSocket(currentTaskId);
+                    }, 500);
+                } else {
+                    // 真实 API 调用
+                    const response = await fetch(`${API_BASE}/v1/video/tasks`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            topic: topic,
+                            duration: duration,
+                            style: style,
+                            target_audience: audience,
+                            client_id: clientId
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success && result.data) {
+                        currentTaskId = result.data.task_id;
+                        console.log('[API] 视频生成任务已创建:', currentTaskId);
+                        
+                        // 订阅任务更新
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({
+                                action: 'subscribe',
+                                task_id: currentTaskId
+                            }));
+                        }
+                        
+                        addTimelineItem('progress', 'Script generation started', new Date().toISOString());
+                    } else {
+                        throw new Error(result.message || 'Failed to create video task');
+                    }
+                }
+            } catch (error) {
+                console.error('[Error] 创建视频任务失败:', error);
+                addTimelineItem('error', `Failed to create task: ${error.message}`, new Date().toISOString());
+                
+                // 恢复生成按钮
+                if (generateBtn) {
+                    generateBtn.disabled = false;
+                    generateBtn.innerHTML = '<i class="fa fa-video-camera mr-2"></i> Generate Video';
+                }
+            }
+        };
+
+        // 下载视频
+        window.downloadVideo = function() {
+            const downloadBtn = document.getElementById('downloadBtn');
+            const downloadUrl = downloadBtn ? downloadBtn.getAttribute('data-url') : null;
+            
+            if (downloadUrl) {
+                window.open(downloadUrl, '_blank');
+            } else if (currentTaskId) {
+                window.open(`${API_BASE}/v1/video/tasks/${currentTaskId}/download`, '_blank');
+            }
+        };
+
+        // Mock WebSocket 初始化
+        function initMockWebSocket() {
+            console.log('[Mock] 初始化 Mock WebSocket 连接...');
+            updateWSStatus(true, 'Connected (Mock Mode)');
+            
+            setTimeout(() => {
+                handleWebSocketMessage({
+                    type: 'connected',
+                    timestamp: new Date().toISOString()
+                });
+            }, 100);
+        }
+
+        // Mock WebSocket 消息序列
+        let mockTimeouts = [];
+        
+        function startMockWebSocket(taskId) {
+            console.log('[Mock] 启动 Mock WebSocket 消息序列，taskId:', taskId);
+            
+            stopMockWebSocket();
+            
+            const taskMockMessages = [
+                {
+                    type: 'script_generation_progress',
+                    task_id: taskId,
+                    message: 'Generating video script and storyboard...',
+                    delay: 1000
+                },
+                {
+                    type: 'script_generation_progress',
+                    task_id: taskId,
+                    message: 'Selecting background music...',
+                    delay: 3000
+                },
+                {
+                    type: 'script_generation_completed',
+                    task_id: taskId,
+                    local_task_id: taskId,
+                    video_task_id: taskId + '_video',
+                    message: 'Script generation completed',
+                    delay: 5000
+                },
+                {
+                    type: 'video_generation_started',
+                    task_id: taskId + '_video',
+                    local_task_id: taskId,
+                    message: 'Video generation started',
+                    delay: 5500
+                },
+                {
+                    type: 'video_generation_progress',
+                    task_id: taskId + '_video',
+                    message: 'Rendering video scenes...',
+                    delay: 7000
+                },
+                {
+                    type: 'video_generation_progress',
+                    task_id: taskId + '_video',
+                    message: 'Adding narration and music...',
+                    delay: 10000
+                },
+                {
+                    type: 'video_generation_completed',
+                    task_id: taskId + '_video',
+                    local_task_id: taskId,
+                    download_url: `${API_BASE}/v1/video/tasks/${taskId}/download`,
+                    markdown_url: `${API_BASE}/v1/video/tasks/${taskId}/markdown`,
+                    message: 'Video generation completed!',
+                    delay: 15000
+                }
+            ];
+            
+            for (let i = 0; i < taskMockMessages.length; i++) {
+                const message = taskMockMessages[i];
+                const delay = message.delay || 0;
+                
+                const timeout = setTimeout(() => {
+                    const msgCopy = { ...message };
+                    msgCopy.timestamp = new Date().toISOString();
+                    console.log('[Mock] 发送消息:', msgCopy.type, 'taskId:', msgCopy.task_id);
+                    handleWebSocketMessage(msgCopy);
+                }, delay);
+                
+                mockTimeouts.push(timeout);
+            }
+            
+            console.log(`[Mock] 已安排 ${taskMockMessages.length} 条消息`);
+        }
+        
+        function stopMockWebSocket() {
+            mockTimeouts.forEach(timeout => clearTimeout(timeout));
+            mockTimeouts = [];
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('[Video App] 页面加载完成');
+            
+            // 初始化样式图标
+            updateStyleIcon();
+            
+            // 渲染示例主题
+            renderExampleTopics();
+            
+            // 初始化 WebSocket（非 Mock 模式）
+            if (!USE_MOCK_DATA) {
+                initWebSocket();
+            }
+            
+            // 监听输入框输入，清除错误消息
+            const topicInput = document.getElementById('topicInput');
+            if (topicInput) {
+                topicInput.addEventListener('input', () => {
+                    const errorDiv = document.getElementById('topicError');
+                    if (errorDiv) {
+                        errorDiv.classList.add('hidden');
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

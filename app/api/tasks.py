@@ -191,6 +191,36 @@ async def get_task_detail(
 
 
 @router.get(
+    "/manus/{manus_task_id}",
+    response_model=APIResponse,
+    summary="通过 Manus 任务 ID 查询任务详情",
+    description="直接通过 Manus 任务 ID 从 Manus API 查询任务详情（无需本地任务记录）",
+)
+async def get_task_by_manus_id(
+    manus_task_id: str,
+    client: AsyncManusClient = Depends(get_manus_client),
+):
+    """通过 Manus 任务 ID 查询任务详情"""
+    from ..manus_client import AsyncTaskManager
+    
+    try:
+        task_manager = AsyncTaskManager(client)
+        task_result = await task_manager.get_task(manus_task_id, convert=True)
+        
+        return APIResponse(
+            success=True,
+            data=task_result,
+            message="任务查询成功",
+        )
+    except Exception as e:
+        logger.error(f"查询 Manus 任务失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"查询任务失败: {str(e)}",
+        )
+
+
+@router.get(
     "/{task_id}/full",
     response_model=APIResponse,
     summary="获取任务完整详情（含所有文件）",

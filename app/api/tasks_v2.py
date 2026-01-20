@@ -24,6 +24,7 @@ from ..dependencies import get_task_tracker, get_ppt_generator
 from ..websocket import manager
 from ..manus_client import AsyncManusClient, AsyncTaskManager
 from ..config import get_settings
+from ..exceptions import ManusAPIException
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +125,15 @@ async def create_task_v2(
         )
         
     except Exception as e:
-        logger.error(f"[V2] Failed to create Manus task: {e}")
+        # 打印更详细的错误信息（包括 Manus API 的 detail）
+        if isinstance(e, ManusAPIException):
+            logger.error(
+                "[V2] ManusAPIException when creating task: %s, detail=%s",
+                e.message,
+                e.detail,
+            )
+        else:
+            logger.error(f"[V2] Failed to create Manus task: {e}")
         
         # 更新本地任务状态为失败
         await tracker.update(

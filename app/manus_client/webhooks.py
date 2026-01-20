@@ -68,15 +68,14 @@ class AsyncWebhookManager:
         """
         获取 Webhook 列表
         
+        注意：Manus API 不支持查询 Webhook 列表（GET /v1/webhooks 返回 405），
+        此方法已废弃，保留仅为兼容性，实际无法使用。
+        
         Returns:
-            Webhook 列表
+            Webhook 列表（始终返回空列表）
         """
-        try:
-            response = await self.client.get("/v1/webhooks")
-            return response.get("webhooks", []) if isinstance(response, dict) else response
-        except Exception as e:
-            logger.error(f"获取 Webhook 列表失败: {e}")
-            return []
+        logger.warning("list_webhooks() 已废弃：Manus API 不支持查询 Webhook 列表")
+        return []
 
 
 # ========== Webhook 自动注册 ==========
@@ -88,12 +87,18 @@ async def register_webhook_on_startup(client: AsyncManusClient) -> Optional[str]
     """
     应用启动时自动注册 Webhook
     
+    注意：如果 Webhook 已存在（409 错误），会视为注册成功。
+    由于 Manus API 不支持查询 Webhook 列表，无法获取已存在 Webhook 的 webhook_id。
+    Webhook 是持久化的，不需要在应用关闭时删除。
+    
     Returns:
-        注册成功返回 webhook_id，失败返回 None
+        新创建成功返回 webhook_id，已存在返回空字符串 ""，失败返回 None
     """
     global _registered_webhook_id
     
     from app.config import get_settings
+    from app.exceptions import ManusAPIException
+    
     settings = get_settings()
     
     if not settings.webhook_enabled:
@@ -109,8 +114,10 @@ async def register_webhook_on_startup(client: AsyncManusClient) -> Optional[str]
     
     logger.info(f"准备注册 Webhook: {webhook_url}")
     
+    webhook_manager = AsyncWebhookManager(client)
+    
     try:
-        webhook_manager = AsyncWebhookManager(client)
+        # 尝试创建 Webhook
         result = await webhook_manager.create_webhook(webhook_url)
         
         _registered_webhook_id = result.get("webhook_id") or result.get("id")
@@ -118,6 +125,21 @@ async def register_webhook_on_startup(client: AsyncManusClient) -> Optional[str]
         
         return _registered_webhook_id
         
+    except ManusAPIException as e:
+        # 如果是因为 Webhook 已存在（409），视为注册成功
+        if "409" in str(e.message) or (e.detail and "already exists" in str(e.detail).lower()):
+            logger.info(
+                f"Webhook 已存在（409），视为注册成功: {webhook_url}。"
+                f"注意：Manus API 不支持查询 Webhook 列表，无法获取 webhook_id。"
+            )
+            # 不设置 _registered_webhook_id，因为无法获取
+            # 返回空字符串表示成功但无 webhook_id
+            return ""
+        else:
+            # 其他错误，记录并返回 None
+            logger.error(f"Webhook 注册失败: {e.message}, detail={e.detail}")
+            return None
+            
     except Exception as e:
         logger.error(f"Webhook 注册失败: {e}")
         return None

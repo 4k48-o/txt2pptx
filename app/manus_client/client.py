@@ -122,6 +122,15 @@ class AsyncManusClient:
                 except Exception:
                     error_detail = response.text[:200]
 
+                # 记录 Manus API 错误的详细信息，便于排查（例如 429 限流）
+                logger.error(
+                    "Manus API error %s for %s %s - detail: %s",
+                    response.status_code,
+                    method,
+                    url,
+                    error_detail,
+                )
+
                 raise ManusAPIException(
                     message=f"Manus API error: {response.status_code}",
                     detail=error_detail,

@@ -6,13 +6,15 @@ Webhook API 端点
 
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from fastapi import APIRouter, Request, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 
 from app.websocket import manager
 from app.dependencies import get_task_tracker, get_ppt_generator
+from app.manus_client import AsyncManusClient
+from app.services.video import VideoGenerationService
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +199,7 @@ async def handle_webhook_event(payload: ManusWebhookPayload):
             
         elif payload.event_type == "task_progress":
             logger.info(f"[Webhook] 处理 task_progress 事件")
-            await handle_task_progress(payload, tracker)
+            await handle_task_progress(payload, tracker, task_id)
             
         elif payload.event_type == "task_stopped":
             logger.info(f"[Webhook] 处理 task_stopped 事件")
@@ -242,16 +244,33 @@ async def handle_task_created(payload: ManusWebhookPayload, tracker):
     })
 
 
-async def handle_task_progress(payload: ManusWebhookPayload, tracker):
+async def handle_task_progress(payload: ManusWebhookPayload, tracker, task_id: str):
     """处理任务进度事件"""
-    task_id = payload.get_task_id()
     message = payload.get_message()
     
     logger.info(f"[Webhook] 任务进度更新: task_id={task_id}, message={message}")
     
+    # 检查是否是视频生成任务
+    local_task = await tracker.find_by_manus_task_id(task_id)
+    progress_type = "task_progress"  # 默认类型
+    
+    if local_task:
+        task_data = await tracker.get(local_task["id"])
+        if task_data:
+            metadata = task_data.metadata or {}
+            task_type = metadata.get("task_type")
+            task_step = metadata.get("step")
+            
+            if task_type == "video_generation":
+                # 根据步骤确定进度类型
+                if task_step == "script_generation":
+                    progress_type = "script_generation_progress"
+                elif task_step == "video_generation":
+                    progress_type = "video_generation_progress"
+    
     # 通过 WebSocket 通知前端
     await manager.send_to_task_subscribers(task_id, {
-        "type": "task_progress",
+        "type": progress_type,
         "task_id": task_id,
         "message": message,
         "timestamp": datetime.now().isoformat()
@@ -270,46 +289,64 @@ async def handle_task_stopped(payload: ManusWebhookPayload, tracker):
     
     local_task = await tracker.find_by_manus_task_id(task_id)
     
+    # 检查是否是视频生成任务
+    is_video_task = False
+    task_step = None
+    if local_task:
+        task_data = await tracker.get(local_task["id"])
+        if task_data:
+            metadata = task_data.metadata or {}
+            task_type = metadata.get("task_type")
+            task_step = metadata.get("step")
+            is_video_task = task_type == "video_generation"
+            logger.info(f"[Webhook] 任务类型: task_type={task_type}, step={task_step}, is_video_task={is_video_task}")
+    
     if stop_reason == "finish":
-        # 任务完成 - 触发下载
-        logger.info(f"[Webhook] 任务完成，开始下载 PPTX: task_id={task_id}")
-        
-        if local_task:
-            # 异步下载 PPTX
-            try:
-                ppt_generator = await get_ppt_generator()
-                await ppt_generator.download_completed_task(task_id)
-                
-                # 重新获取更新后的任务信息
-                updated_task = await tracker.get(local_task["id"])
-                
+        if is_video_task:
+            # 视频生成任务完成处理
+            await handle_video_task_stopped(
+                payload, tracker, local_task, task_step, task_id
+            )
+        else:
+            # PPT 生成任务完成 - 触发下载
+            logger.info(f"[Webhook] PPT 任务完成，开始下载 PPTX: task_id={task_id}")
+            
+            if local_task:
+                # 异步下载 PPTX
+                try:
+                    ppt_generator = await get_ppt_generator()
+                    await ppt_generator.download_completed_task(task_id)
+                    
+                    # 重新获取更新后的任务信息
+                    updated_task = await tracker.get(local_task["id"])
+                    
+                    await manager.send_to_task_subscribers(task_id, {
+                        "type": "task_completed",
+                        "task_id": task_id,
+                        "local_task_id": local_task["id"],
+                        "title": (updated_task.title if updated_task else None) or task_title,
+                        "download_url": f"/api/tasks/{local_task['id']}/download",
+                        "message": "PPT 生成完成！",
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    logger.info(f"[Webhook] 任务完成通知已发送")
+                except Exception as e:
+                    logger.error(f"[Webhook] 下载 PPTX 失败: {e}", exc_info=True)
+                    await manager.send_to_task_subscribers(task_id, {
+                        "type": "task_failed",
+                        "task_id": task_id,
+                        "error": f"下载失败: {str(e)}",
+                        "timestamp": datetime.now().isoformat()
+                    })
+            else:
+                logger.warning(f"[Webhook] 任务完成但未找到本地任务: task_id={task_id}")
                 await manager.send_to_task_subscribers(task_id, {
                     "type": "task_completed",
                     "task_id": task_id,
-                    "local_task_id": local_task["id"],
-                    "title": (updated_task.title if updated_task else None) or task_title,
-                    "download_url": f"/api/tasks/{local_task['id']}/download",
+                    "title": task_title,
                     "message": "PPT 生成完成！",
                     "timestamp": datetime.now().isoformat()
                 })
-                logger.info(f"[Webhook] 任务完成通知已发送")
-            except Exception as e:
-                logger.error(f"[Webhook] 下载 PPTX 失败: {e}", exc_info=True)
-                await manager.send_to_task_subscribers(task_id, {
-                    "type": "task_failed",
-                    "task_id": task_id,
-                    "error": f"下载失败: {str(e)}",
-                    "timestamp": datetime.now().isoformat()
-                })
-        else:
-            logger.warning(f"[Webhook] 任务完成但未找到本地任务: task_id={task_id}")
-            await manager.send_to_task_subscribers(task_id, {
-                "type": "task_completed",
-                "task_id": task_id,
-                "title": task_title,
-                "message": "PPT 生成完成！",
-                "timestamp": datetime.now().isoformat()
-            })
         
     elif stop_reason == "ask":
         # 需要用户输入
@@ -343,6 +380,149 @@ async def handle_task_stopped(payload: ManusWebhookPayload, tracker):
             "type": "task_failed",
             "task_id": task_id,
             "error": message or "任务执行失败",
+            "timestamp": datetime.now().isoformat()
+        })
+
+
+async def handle_video_task_stopped(
+    payload: ManusWebhookPayload,
+    tracker,
+    local_task: Optional[Dict[str, Any]],
+    task_step: Optional[str],
+    task_id: str,
+):
+    """
+    处理视频生成任务停止事件
+    
+    Args:
+        payload: Webhook 负载
+        tracker: 任务追踪服务
+        local_task: 本地任务信息
+        task_step: 当前步骤（script_generation / video_generation）
+        task_id: Manus 任务 ID
+    """
+    logger.info(f"[Webhook] 处理视频生成任务停止: task_id={task_id}, step={task_step}")
+    
+    if not local_task:
+        logger.warning(f"[Webhook] 视频任务完成但未找到本地任务: task_id={task_id}")
+        return
+    
+    local_task_id = local_task["id"]
+    
+    try:
+        # 获取 Manus 客户端和视频生成服务
+        from app.dependencies import get_manus_client
+        async for client in get_manus_client():
+            video_service = VideoGenerationService(client, tracker)
+            
+            if task_step == "script_generation":
+                # 脚本生成完成，触发视频生成
+                logger.info(f"[Webhook] 脚本生成完成，触发视频生成: local_task_id={local_task_id}, script_task_id={task_id}")
+                
+                try:
+                    result = await video_service.handle_script_generation_complete(
+                        local_task_id=local_task_id,
+                        script_task_id=task_id,
+                    )
+                    
+                    video_task_id = result.get("video_task_id")
+                    
+                    # 发送脚本生成完成通知
+                    await manager.send_to_task_subscribers(task_id, {
+                        "type": "script_generation_completed",
+                        "task_id": task_id,
+                        "local_task_id": local_task_id,
+                        "video_task_id": video_task_id,
+                        "message": "脚本生成完成，开始生成视频",
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    
+                    # 同时订阅视频生成任务
+                    if video_task_id:
+                        await manager.send_to_task_subscribers(video_task_id, {
+                            "type": "video_generation_started",
+                            "task_id": video_task_id,
+                            "local_task_id": local_task_id,
+                            "message": "视频生成任务已创建",
+                            "timestamp": datetime.now().isoformat()
+                        })
+                    
+                    logger.info(f"[Webhook] 视频生成任务已创建: video_task_id={video_task_id}")
+                    
+                except Exception as e:
+                    logger.error(f"[Webhook] 触发视频生成失败: {e}", exc_info=True)
+                    await manager.send_to_task_subscribers(task_id, {
+                        "type": "script_generation_failed",
+                        "task_id": task_id,
+                        "local_task_id": local_task_id,
+                        "error": f"触发视频生成失败: {str(e)}",
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    # 更新任务状态为失败
+                    await tracker.update(
+                        local_task_id,
+                        status="failed",
+                        error=f"触发视频生成失败: {str(e)}"
+                    )
+            
+            elif task_step == "video_generation":
+                # 视频生成完成，下载视频
+                logger.info(f"[Webhook] 视频生成完成，开始下载: local_task_id={local_task_id}, video_task_id={task_id}")
+                
+                try:
+                    result = await video_service.handle_video_generation_complete(
+                        local_task_id=local_task_id,
+                        video_task_id=task_id,
+                    )
+                    
+                    video_path = result.get("video_path")
+                    
+                    # 更新任务状态为完成
+                    await tracker.update(
+                        local_task_id,
+                        status="completed"
+                    )
+                    
+                    # 发送视频生成完成通知
+                    await manager.send_to_task_subscribers(task_id, {
+                        "type": "video_generation_completed",
+                        "task_id": task_id,
+                        "local_task_id": local_task_id,
+                        "video_path": video_path,
+                        "download_url": f"/api/v1/video/tasks/{local_task_id}/download",
+                        "message": "视频生成完成！",
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    
+                    logger.info(f"[Webhook] 视频生成完成通知已发送: video_path={video_path}")
+                    
+                except Exception as e:
+                    logger.error(f"[Webhook] 下载视频失败: {e}", exc_info=True)
+                    await manager.send_to_task_subscribers(task_id, {
+                        "type": "video_generation_failed",
+                        "task_id": task_id,
+                        "local_task_id": local_task_id,
+                        "error": f"下载视频失败: {str(e)}",
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    # 更新任务状态为失败
+                    await tracker.update(
+                        local_task_id,
+                        status="failed",
+                        error=f"下载视频失败: {str(e)}"
+                    )
+            else:
+                logger.warning(f"[Webhook] 未知的视频任务步骤: step={task_step}, task_id={task_id}")
+            
+            break  # 只使用第一个客户端实例
+            
+    except Exception as e:
+        logger.error(f"[Webhook] 处理视频任务停止失败: {e}", exc_info=True)
+        await manager.send_to_task_subscribers(task_id, {
+            "type": "task_failed",
+            "task_id": task_id,
+            "local_task_id": local_task_id,
+            "error": f"处理失败: {str(e)}",
             "timestamp": datetime.now().isoformat()
         })
 

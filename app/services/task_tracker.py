@@ -55,6 +55,7 @@ class LocalTask:
     title: Optional[str] = None                # 任务标题
     task_url: Optional[str] = None             # Manus 任务链接
     credit_usage: int = 0                      # 消耗积分
+    metadata: Optional[Dict[str, Any]] = None  # 扩展元数据（用于存储任务类型、步骤等信息）
     
     # Webhook 事件列表
     webhook_events: List[Dict[str, Any]] = field(default_factory=list)

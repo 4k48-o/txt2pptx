@@ -31,6 +31,34 @@ class Settings(BaseSettings):
     # 存储配置
     output_dir: Path = Field(default=Path("./storage/output"), env="OUTPUT_DIR")
     tasks_file: Path = Field(default=Path("./storage/tasks.json"), env="TASKS_FILE")
+    
+    # 视频生成配置
+    video_storage_dir: Path = Field(
+        default=Path("./storage/videos"), env="VIDEO_STORAGE_DIR"
+    )
+    markdown_storage_dir: Path = Field(
+        default=Path("./storage/markdown"), env="MARKDOWN_STORAGE_DIR"
+    )
+    video_min_duration: int = Field(default=5, env="VIDEO_MIN_DURATION")
+    video_max_duration: int = Field(default=30, env="VIDEO_MAX_DURATION")
+    # 注意：List 类型的环境变量需要使用 JSON 格式或逗号分隔的字符串
+    # 这里使用默认值，如需从环境变量读取，请使用 JSON 格式
+    video_supported_durations: List[int] = Field(
+        default=[5, 10, 15, 20, 25, 30],
+        description="支持的视频时长列表（秒）",
+    )
+    video_supported_styles: List[str] = Field(
+        default=["educational", "promotional", "documentary", "tutorial", "corporate"],
+        description="支持的视频风格列表",
+    )
+    video_supported_audiences: List[str] = Field(
+        default=["general", "students", "professionals", "executives"],
+        description="支持的目标受众列表",
+    )
+    video_supported_formats: List[str] = Field(
+        default=["mp4"],
+        description="支持的视频格式列表",
+    )
 
     # 日志配置
     log_level: str = Field(default="INFO", env="LOG_LEVEL")
@@ -56,6 +84,8 @@ class Settings(BaseSettings):
         # 确保目录存在
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.tasks_file.parent.mkdir(parents=True, exist_ok=True)
+        self.video_storage_dir.mkdir(parents=True, exist_ok=True)
+        self.markdown_storage_dir.mkdir(parents=True, exist_ok=True)
 
 
 @lru_cache()
