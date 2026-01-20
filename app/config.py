@@ -27,9 +27,9 @@ class Settings(BaseSettings):
     webhook_enabled: bool = Field(default=False, env="WEBHOOK_ENABLED")
     webhook_base_url: str = Field(default="", env="WEBHOOK_BASE_URL")
     webhook_path: str = Field(default="/webhook/manus", env="WEBHOOK_PATH")
-    # 应用对外基础路径（用于反向代理或子路径部署，如 /menus）
+    # 应用对外基础路径（用于反向代理或子路径部署，如 /manus）
     # 重要：该值会影响 webhook 对外回调地址的拼接
-    app_base_path: str = Field(default="/menus", env="APP_BASE_PATH")
+    app_base_path: str = Field(default="/manus", env="APP_BASE_PATH")
 
     # 存储配置
     output_dir: Path = Field(default=Path("./storage/output"), env="OUTPUT_DIR")

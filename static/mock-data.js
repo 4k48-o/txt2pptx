@@ -3,8 +3,8 @@
  * 基于真实的后台日志生成
  */
 
-// /menus 子路径部署适配：自动推断 base path
-const APP_BASE = window.location.pathname.startsWith('/menus') ? '/menus' : '';
+// /manus 子路径部署适配：自动推断 base path
+const APP_BASE = window.location.pathname.startsWith('/manus') ? '/manus' : '';
 
 // Mock WebSocket 消息序列
 const mockWebSocketMessages = [

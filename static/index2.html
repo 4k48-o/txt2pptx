@@ -405,7 +405,7 @@
         (function() {
             const script = document.createElement('script');
             // 使用文件修改时间戳作为版本号，修改文件后更新此值
-            const appBase = window.location.pathname.startsWith('/menus') ? '/menus' : '';
+            const appBase = window.location.pathname.startsWith('/manus') ? '/manus' : '';
             script.src = `${appBase}/static/mock-data.js?v=2768535296`;
             script.async = false;
             document.head.appendChild(script);
@@ -413,8 +413,8 @@
     </script>
     
     <script>
-        // /menus 子路径部署适配：自动推断 base path
-        const APP_BASE = window.location.pathname.startsWith('/menus') ? '/menus' : '';
+        // /manus 子路径部署适配：自动推断 base path
+        const APP_BASE = window.location.pathname.startsWith('/manus') ? '/manus' : '';
         const API_BASE = `${APP_BASE}/api`;
         let currentTaskId = null;
         let clientId = null;
