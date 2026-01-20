@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
 from .config import get_settings
 from .api.router import api_router
@@ -51,9 +51,9 @@ async def lifespan(app: FastAPI):
             if webhook_id is not None:
                 # webhook_id 可能为空字符串（表示已存在但无法获取 id）或实际的 webhook_id
                 if webhook_id:
-                    logger.info(f"Webhook 注册成功: {settings.webhook_base_url}{settings.webhook_path}, webhook_id={webhook_id}")
+                    logger.info(f"Webhook 注册成功: {settings.webhook_callback_url()}, webhook_id={webhook_id}")
                 else:
-                    logger.info(f"Webhook 已存在: {settings.webhook_base_url}{settings.webhook_path}")
+                    logger.info(f"Webhook 已存在: {settings.webhook_callback_url()}")
             else:
                 logger.warning("Webhook 注册失败")
         else:
@@ -73,8 +73,8 @@ async def lifespan(app: FastAPI):
     logger.info("Cleaned up Manus client connection")
 
 
-# 创建 FastAPI 应用
-app = FastAPI(
+# ========== 业务子应用（最终对外挂载到 /menus） ==========
+menus_app = FastAPI(
     title="Manus PPT Generator API",
     description="自动化 PPT 生成服务，基于 Manus AI",
     version="0.2.0",
@@ -84,7 +84,7 @@ app = FastAPI(
 )
 
 # 配置 CORS
-app.add_middleware(
+menus_app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
@@ -93,13 +93,13 @@ app.add_middleware(
 )
 
 # 注册全局异常处理
-setup_exception_handlers(app)
+setup_exception_handlers(menus_app)
 
 # 静态文件目录
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 # 根路径 - 返回前端页面（必须在其他路由之前注册，确保优先级）
-@app.get("/")
+@menus_app.get("/")
 async def root():
     """根路径，返回前端页面（新版本，Webhook 模式）"""
     index_file = STATIC_DIR / "index2.html"
@@ -117,16 +117,16 @@ async def root():
     }
 
 # 注册路由（在根路径之后注册，避免覆盖）
-app.include_router(api_router)
+menus_app.include_router(api_router)
 
 # 注册 WebSocket 路由
-app.include_router(websocket_router)
+menus_app.include_router(websocket_router)
 
 # 注册 Webhook 路由
-app.include_router(webhook_router)
+menus_app.include_router(webhook_router)
 
 
-@app.get("/realtime")
+@menus_app.get("/realtime")
 async def realtime_page():
     """实时模式页面（WebSocket + Webhook）"""
     webhook_file = STATIC_DIR / "webhook.html"
@@ -135,7 +135,7 @@ async def realtime_page():
     return {"error": "webhook.html not found"}
 
 
-@app.get("/tasks")
+@menus_app.get("/tasks")
 async def tasks_page():
     """任务列表页面"""
     tasks_file = STATIC_DIR / "tasks.html"
@@ -144,7 +144,7 @@ async def tasks_page():
     return {"error": "tasks.html not found"}
 
 
-@app.get("/video")
+@menus_app.get("/video")
 async def video_page():
     """视频生成页面"""
     video_file = STATIC_DIR / "video.html"
@@ -155,5 +155,28 @@ async def video_page():
 
 # 挂载静态文件（放在最后，避免覆盖其他路由）
 if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    menus_app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+# ========== 根应用（只负责挂载业务子应用到 /menus） ==========
+root_app = FastAPI(
+    title="Manus PPT Generator (Root)",
+    description="Root app: mount business app under /menus",
+    version="0.2.0",
+    docs_url=None,
+    redoc_url=None,
+)
+
+
+@root_app.get("/")
+async def root_redirect():
+    """根路径重定向到 /menus/（避免用户误访问根路径）"""
+    return RedirectResponse(url="/menus/", status_code=307)
+
+
+# 对外统一入口：/menus/*
+root_app.mount("/menus", menus_app)
+
+# uvicorn 启动对象
+app = root_app
 

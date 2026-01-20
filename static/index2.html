@@ -205,7 +205,7 @@
     <!-- 顶部导航栏 -->
     <header class="bg-white shadow-soft py-4 px-6 md:px-12 flex justify-between items-center">
         <div class="flex items-center gap-3">
-            <img src="/static/logo/logo.png" alt="DLY AI" class="h-8 w-auto" />
+            <img src="static/logo/logo.png" alt="DLY AI" class="h-8 w-auto" />
             <span class="text-lg font-semibold text-gray-800">DLY AI</span>
         </div>
         <div class="flex items-center gap-6">
@@ -213,7 +213,7 @@
                 <span class="text-gray-500 text-sm">1,640</span>
                 <i class="fa fa-bolt text-yellow-500"></i>
             </div>
-            <a href="/tasks" class="text-gray-600 hover:text-gray-900 text-sm">Tasks</a>
+            <a href="tasks" class="text-gray-600 hover:text-gray-900 text-sm">Tasks</a>
             <div class="w-8 h-8 rounded-full bg-gray-300 overflow-hidden">
                 <img src="https://picsum.photos/200/200" alt="User avatar" class="w-full h-full object-cover">
             </div>
@@ -405,14 +405,17 @@
         (function() {
             const script = document.createElement('script');
             // 使用文件修改时间戳作为版本号，修改文件后更新此值
-            script.src = '/static/mock-data.js?v=2768535296';
+            const appBase = window.location.pathname.startsWith('/menus') ? '/menus' : '';
+            script.src = `${appBase}/static/mock-data.js?v=2768535296`;
             script.async = false;
             document.head.appendChild(script);
         })();
     </script>
     
     <script>
-        const API_BASE = '/api';
+        // /menus 子路径部署适配：自动推断 base path
+        const APP_BASE = window.location.pathname.startsWith('/menus') ? '/menus' : '';
+        const API_BASE = `${APP_BASE}/api`;
         let currentTaskId = null;
         let clientId = null;
         let ws = null;
@@ -468,7 +471,7 @@
                 task_id: 'QqxM2dk9pVHxNGBTSqLoAe',
                 local_task_id: 'e57e342f-ee5f-4240-8396-ccb09e77f612',
                 title: 'Cybersecurity Training Module for Executives',
-                download_url: '/api/tasks/e57e342f-ee5f-4240-8396-ccb09e77f612/download',
+                download_url: `${API_BASE}/tasks/e57e342f-ee5f-4240-8396-ccb09e77f612/download`,
                 message: 'PPT 生成完成！',
                 delay: 10000 // 10秒后发送（真实：188秒）
             }
@@ -549,7 +552,7 @@
                     task_id: taskId,
                     local_task_id: taskId,
                     title: 'Cybersecurity Training Module for Executives',
-                    download_url: `/api/tasks/${taskId}/download`,
+                    download_url: `${API_BASE}/tasks/${taskId}/download`,
                     message: 'PPT 生成完成！',
                     delay: 10000 // 10秒后发送
                 }
@@ -848,7 +851,7 @@
         function initWebSocket() {
             clientId = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws/${clientId}`;
+            const wsUrl = `${protocol}//${window.location.host}${APP_BASE}/ws/${clientId}`;
             
             ws = new WebSocket(wsUrl);
             

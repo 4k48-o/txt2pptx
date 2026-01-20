@@ -341,7 +341,9 @@
     </div>
 
     <script>
-        const API_BASE = '/api';
+        // /menus 子路径部署适配：自动推断 base path
+        const APP_BASE = window.location.pathname.startsWith('/menus') ? '/menus' : '';
+        const API_BASE = `${APP_BASE}/api`;
         let currentTaskId = null;
         let clientId = null;
         let ws = null;
@@ -476,7 +478,8 @@
             }
 
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws/client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const appBase = window.location.pathname.startsWith('/menus') ? '/menus' : '';
+            const wsUrl = `${protocol}//${window.location.host}${appBase}/ws/client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             
             console.log('[WebSocket] 连接中:', wsUrl);
             

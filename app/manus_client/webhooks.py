@@ -109,8 +109,8 @@ async def register_webhook_on_startup(client: AsyncManusClient) -> Optional[str]
         logger.warning("WEBHOOK_BASE_URL 未配置，无法注册 Webhook")
         return None
     
-    # 构建完整的 Webhook URL
-    webhook_url = f"{settings.webhook_base_url.rstrip('/')}{settings.webhook_path}"
+    # 构建完整的对外 Webhook URL（包含 app_base_path，例如 /menus）
+    webhook_url = settings.webhook_callback_url()
     
     logger.info(f"准备注册 Webhook: {webhook_url}")
     

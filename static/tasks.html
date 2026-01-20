@@ -392,8 +392,8 @@
     <div class="header">
         <h1>📋 任务列表</h1>
         <div class="nav-links">
-            <a href="/">创建任务</a>
-            <a href="/realtime">实时模式</a>
+            <a href="./">创建任务</a>
+            <a href="realtime">实时模式</a>
         </div>
     </div>
     
@@ -431,7 +431,9 @@
     </div>
     
     <script>
-        const API_BASE = '/api';
+        // /menus 子路径部署适配：自动推断 base path
+        const APP_BASE = window.location.pathname.startsWith('/menus') ? '/menus' : '';
+        const API_BASE = `${APP_BASE}/api`;
         let currentPage = 0;
         const pageSize = 20;
         let currentStatus = '';

@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     webhook_enabled: bool = Field(default=False, env="WEBHOOK_ENABLED")
     webhook_base_url: str = Field(default="", env="WEBHOOK_BASE_URL")
     webhook_path: str = Field(default="/webhook/manus", env="WEBHOOK_PATH")
+    # 应用对外基础路径（用于反向代理或子路径部署，如 /menus）
+    # 重要：该值会影响 webhook 对外回调地址的拼接
+    app_base_path: str = Field(default="/menus", env="APP_BASE_PATH")
 
     # 存储配置
     output_dir: Path = Field(default=Path("./storage/output"), env="OUTPUT_DIR")
@@ -86,6 +89,33 @@ class Settings(BaseSettings):
         self.tasks_file.parent.mkdir(parents=True, exist_ok=True)
         self.video_storage_dir.mkdir(parents=True, exist_ok=True)
         self.markdown_storage_dir.mkdir(parents=True, exist_ok=True)
+
+    def normalized_app_base_path(self) -> str:
+        """
+        规范化基础路径：
+        - 空/"/" -> ""
+        - 确保以 "/" 开头
+        - 去除末尾 "/"
+        """
+        bp = (self.app_base_path or "").strip()
+        if not bp or bp == "/":
+            return ""
+        if not bp.startswith("/"):
+            bp = "/" + bp
+        return bp.rstrip("/")
+
+    def normalized_webhook_path(self) -> str:
+        """确保 webhook_path 以 "/" 开头。"""
+        wp = (self.webhook_path or "").strip() or "/webhook/manus"
+        if not wp.startswith("/"):
+            wp = "/" + wp
+        return wp
+
+    def webhook_callback_url(self) -> str:
+        """对外 Webhook 回调 URL（包含 app_base_path + webhook_path）。"""
+        if not self.webhook_base_url:
+            return ""
+        return f"{self.webhook_base_url.rstrip('/')}{self.normalized_app_base_path()}{self.normalized_webhook_path()}"
 
 
 @lru_cache()

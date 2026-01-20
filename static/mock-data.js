@@ -3,6 +3,9 @@
  * 基于真实的后台日志生成
  */
 
+// /menus 子路径部署适配：自动推断 base path
+const APP_BASE = window.location.pathname.startsWith('/menus') ? '/menus' : '';
+
 // Mock WebSocket 消息序列
 const mockWebSocketMessages = [
     // 1. WebSocket 连接成功
@@ -52,7 +55,7 @@ const mockWebSocketMessages = [
         task_id: 'QqxM2dk9pVHxNGBTSqLoAe',
         local_task_id: 'e57e342f-ee5f-4240-8396-ccb09e77f612',
         title: 'Cybersecurity Training Module for Executives',
-        download_url: '/api/tasks/e57e342f-ee5f-4240-8396-ccb09e77f612/download',
+        download_url: `${APP_BASE}/api/tasks/e57e342f-ee5f-4240-8396-ccb09e77f612/download`,
         message: 'PPT 生成完成！',
         timestamp: '2026-01-16T10:26:02.097Z'
     }

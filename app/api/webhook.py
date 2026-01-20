@@ -537,7 +537,7 @@ async def webhook_status():
     
     webhook_url = ""
     if settings.webhook_base_url:
-        webhook_url = f"{settings.webhook_base_url.rstrip('/')}{settings.webhook_path}"
+        webhook_url = settings.webhook_callback_url()
     
     return {
         "enabled": settings.webhook_enabled,

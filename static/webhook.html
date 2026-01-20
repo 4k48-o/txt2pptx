@@ -420,7 +420,7 @@
         </div>
         
         <div class="mode-switcher">
-            <a href="/">← 切换到轮询模式</a>
+            <a href="./">← 切换到轮询模式</a>
         </div>
         
         <div class="footer">
@@ -429,10 +429,12 @@
     </div>
 
     <script>
-        const API_BASE = '/api';
+        // /menus 子路径部署适配：自动推断 base path
+        const APP_BASE = window.location.pathname.startsWith('/menus') ? '/menus' : '';
+        const API_BASE = `${APP_BASE}/api`;
         // 自动适配 ws/wss 协议
         const WS_PROTOCOL = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const WS_URL = `${WS_PROTOCOL}//${window.location.host}/ws`;
+        const WS_URL = `${WS_PROTOCOL}//${window.location.host}${APP_BASE}/ws`;
         
         let ws = null;
         let clientId = null;

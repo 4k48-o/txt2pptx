@@ -304,7 +304,9 @@
     </div>
 
     <script>
-        const API_BASE = '/api';
+        // /menus 子路径部署适配：自动推断 base path
+        const APP_BASE = window.location.pathname.startsWith('/menus') ? '/menus' : '';
+        const API_BASE = `${APP_BASE}/api`;
         let currentTaskId = null;
         let pollInterval = null;
 
