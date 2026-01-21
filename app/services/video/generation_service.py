@@ -302,8 +302,13 @@ class VideoGenerationService:
                 metadata_update["markdown_file_url"] = file_url
             
             metadata.update(metadata_update)
-            await self.tracker.update(local_task_id, metadata=metadata)
-            logger.debug("[视频生成] 任务元数据已更新")
+            # 更新 manus_task_id 为 video_task_id，以便 webhook 能够通过 video_task_id 找到本地任务
+            await self.tracker.update(
+                local_task_id, 
+                manus_task_id=video_task_id,
+                metadata=metadata
+            )
+            logger.debug(f"[视频生成] 任务元数据已更新，manus_task_id={video_task_id}")
 
             logger.info(
                 f"[视频生成] 脚本生成完成处理成功: video_task_id={video_task_id}"
@@ -367,7 +372,7 @@ class VideoGenerationService:
                 raise RuntimeError("TaskTrackerService 未初始化")
 
             logger.debug(f"[视频生成] 获取本地任务信息: local_task_id={local_task_id}")
-            task = await self.tracker.get_task(local_task_id)
+            task = await self.tracker.get(local_task_id)
             if not task:
                 raise RuntimeError(f"本地任务不存在: {local_task_id}")
 
@@ -698,46 +703,108 @@ class VideoGenerationService:
             保存的视频文件路径
         """
         logger.info("下载视频文件...")
+        
+        # 记录任务结果结构（用于调试）
+        import json
+        logger.debug(f"[视频下载] 任务结果结构: {json.dumps(task_result, indent=2, ensure_ascii=False, default=str)}")
 
         # 从任务结果中提取视频文件 URL
+        # 根据 Manus API 文档，output 是 TaskMessage 数组
         outputs = task_result.get("output", task_result.get("outputs", []))
 
         video_url = None
         file_name = None
 
         # 遍历 output 消息，查找文件类型的输出
-        for output in outputs:
-            content = output.get("content", [])
-            for item in content:
+        # 根据 API 文档和 tasks.py 的实现，output 中的每个元素是 TaskMessage
+        # TaskMessage 的 type 为 "message"，包含 content 数组
+        for message in outputs:
+            # 检查是否是 message 类型（根据 API 文档和 tasks.py 的实现）
+            message_type = message.get("type", "")
+            
+            # 如果 message 类型是 "message"，从 content 中提取
+            if message_type == "message":
+                content_items = message.get("content", [])
+            # 如果 message 有 content 字段但没有 type，也尝试使用
+            elif "content" in message:
+                content_items = message.get("content", [])
+            # 如果 message 本身就是 content 数组
+            elif isinstance(message, list):
+                content_items = message
+            else:
+                # 尝试将 message 本身作为 content item
+                content_items = [message]
+            
+            # 遍历 content items
+            for item in content_items:
                 item_type = item.get("type", "")
-                # 查找 output_file 类型
+                
+                # 查找 output_file 类型（根据 API 文档）
                 if item_type == "output_file":
-                    url = item.get("fileUrl", item.get("url", item.get("file_url", "")))
-                    file_name = item.get("fileName", item.get("filename", ""))
+                    url = item.get("fileUrl") or item.get("url") or item.get("file_url")
+                    file_name = item.get("fileName") or item.get("filename") or item.get("file_name")
+                    mime_type = item.get("mimeType") or item.get("mime_type", "")
+                    
+                    # 检查是否是视频文件（通过 mimeType 或文件扩展名）
+                    is_video = False
                     if url:
+                        if mime_type and "video" in mime_type.lower():
+                            is_video = True
+                        elif file_name and file_name.lower().endswith(('.mp4', '.mov', '.avi', '.webm', '.mkv')):
+                            is_video = True
+                        else:
+                            # 如果没有明确的类型信息，假设是视频（因为这是视频生成任务）
+                            is_video = True
+                            logger.warning(f"[视频下载] 无法确定文件类型，假设是视频: {file_name or 'unknown'}")
+                    
+                    if url and is_video:
                         video_url = url
+                        logger.info(f"[视频下载] 找到视频文件: {file_name or 'unknown'}, MIME: {mime_type}, URL: {url[:80]}...")
                         break
+                    elif url:
+                        # 如果不是视频文件，记录日志但继续查找
+                        logger.debug(f"[视频下载] 找到文件但不是视频: {file_name}, type: {mime_type}")
+                
+                # 兼容其他可能的类型
                 elif item_type in ["file", "artifact", "video"]:
-                    url = item.get("fileUrl", item.get("url", ""))
+                    url = item.get("fileUrl") or item.get("url") or item.get("file_url")
                     if url:
                         video_url = url
+                        file_name = item.get("fileName") or item.get("filename")
+                        logger.info(f"[视频下载] 找到文件 (类型: {item_type}): {url[:80]}...")
                         break
+            
             if video_url:
                 break
 
+        # 如果还没找到，尝试从其他字段获取
         if not video_url:
-            # 尝试从其他字段获取
             video_url = (
                 task_result.get("output_url")
                 or task_result.get("result_url")
                 or task_result.get("download_url")
+                or task_result.get("video_url")
             )
+            if video_url:
+                logger.info(f"[视频下载] 从其他字段找到 URL: {video_url[:80]}...")
 
         if not video_url:
-            logger.error(f"任务结果: {task_result}")
+            # 记录完整的任务结果用于调试
+            logger.error(f"[视频下载] 未找到视频下载链接")
+            logger.error(f"[视频下载] 任务结果 keys: {list(task_result.keys())}")
+            logger.error(f"[视频下载] output 类型: {type(outputs)}, 长度: {len(outputs) if isinstance(outputs, list) else 'N/A'}")
+            if outputs and isinstance(outputs, list) and len(outputs) > 0:
+                logger.error(f"[视频下载] 第一个 output 示例: {json.dumps(outputs[0], indent=2, ensure_ascii=False, default=str)}")
+            elif outputs:
+                logger.error(f"[视频下载] output 内容: {json.dumps(outputs, indent=2, ensure_ascii=False, default=str)}")
             raise RuntimeError(
-                "未找到视频下载链接。请检查日志中的任务详情。"
+                "未找到视频下载链接。请检查日志中的任务详情。任务结果已记录到日志中。"
             )
+        
+        # 验证 URL 格式
+        if not video_url.startswith(('http://', 'https://')):
+            logger.error(f"[视频下载] 无效的视频 URL 格式: {video_url}")
+            raise RuntimeError(f"无效的视频 URL 格式: {video_url}")
 
         # 确定输出文件名
         if not file_name:

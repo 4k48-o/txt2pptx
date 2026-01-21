@@ -1,24 +1,26 @@
 """
-Video API - 视频生成 API 接口
+Video Service Router - 视频生成服务路由
 """
 
 import logging
 from typing import Optional
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 
-from ..schemas.video import VideoTaskRequest, VideoTaskResponse, VideoTaskStatus
-from ..schemas.common import APIResponse
-from ..config import get_settings
-from ..dependencies import get_task_tracker, get_manus_client
-from ..services import TaskTrackerService
-from ..manus_client import AsyncManusClient
-from ..services.video import VideoGenerationService
-from ..websocket import manager
+from ...schemas.video import VideoTaskRequest, VideoTaskResponse, VideoTaskStatus
+from ...schemas.common import APIResponse
+from ...config import get_settings
+from ...dependencies import get_task_tracker, get_manus_client
+from ...services import TaskTrackerService
+from ...manus_client import AsyncManusClient
+from ...services.video import VideoGenerationService
+from ...websocket import manager
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/v1/video/tasks", tags=["video"])
+router = APIRouter(prefix="/video/tasks", tags=["video"])
 
 
 @router.post(
@@ -240,24 +242,23 @@ async def get_video_task(
 
 @router.get(
     "/{task_id}/download",
-    summary="下载生成的视频文件",
-    description="下载视频生成任务完成的视频文件",
+    summary="下载或播放生成的视频文件",
+    description="下载或在线播放视频生成任务完成的视频文件。使用 ?inline=true 参数可以在线播放",
 )
 async def download_video(
     task_id: str,
+    inline: bool = False,
     tracker: TaskTrackerService = Depends(get_task_tracker),
     settings=Depends(get_settings),
 ):
     """
-    下载生成的视频文件
+    下载或播放生成的视频文件
 
     - **task_id**: 任务 ID（本地任务 ID）
+    - **inline**: 是否在线播放（True）还是下载（False，默认）
     """
-    from fastapi.responses import FileResponse
-    from pathlib import Path
-
     try:
-        logger.info(f"下载视频文件: task_id={task_id}")
+        logger.info(f"获取视频文件: task_id={task_id}, inline={inline}")
 
         # 1. 查询任务信息
         task = await tracker.get(task_id)
@@ -267,21 +268,38 @@ async def download_video(
                 detail=f"任务不存在: {task_id}",
             )
 
-        # 2. 验证任务状态（必须已完成）
-        if task.status != "completed":
+        # 2. 验证任务状态（必须已完成，除非是测试模式）
+        metadata = task.metadata or {}
+        is_test_mode = metadata.get("task_type") == "video_generation" and task.status != "completed"
+        
+        if task.status != "completed" and not is_test_mode:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"任务尚未完成，当前状态: {task.status}",
             )
 
         # 3. 获取视频文件路径
-        metadata = task.metadata or {}
         video_path_str = metadata.get("video_path")
+        
+        # 如果是测试模式且没有视频文件，尝试使用测试视频文件
+        if not video_path_str and is_test_mode:
+            # 尝试查找测试视频文件
+            test_video_paths = [
+                Path("static/test/sample_video.mp4"),
+                Path("./static/test/sample_video.mp4"),
+                Path(__file__).parent.parent.parent.parent / "static" / "test" / "sample_video.mp4",
+            ]
+            
+            for test_path in test_video_paths:
+                if test_path.exists():
+                    video_path_str = str(test_path)
+                    logger.info(f"使用测试视频文件: {video_path_str}")
+                    break
         
         if not video_path_str:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="视频文件路径不存在",
+                detail="视频文件路径不存在。如果是测试模式，请准备测试视频文件放在 static/test/sample_video.mp4",
             )
 
         video_path = Path(video_path_str)
@@ -291,27 +309,31 @@ async def download_video(
             logger.error(f"视频文件不存在: {video_path}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="视频文件不存在",
+                detail=f"视频文件不存在: {video_path}",
             )
 
-        # 5. 返回文件响应
-        logger.info(f"返回视频文件: {video_path}")
+        # 5. 根据 inline 参数决定 Content-Disposition
+        disposition = "inline" if inline else "attachment"
+        
+        # 6. 返回文件响应
+        logger.info(f"返回视频文件: {video_path}, disposition={disposition}")
         return FileResponse(
             path=str(video_path),
             filename=video_path.name,
             media_type="video/mp4",
             headers={
-                "Content-Disposition": f'attachment; filename="{video_path.name}"',
+                "Content-Disposition": f'{disposition}; filename="{video_path.name}"',
+                "Accept-Ranges": "bytes",  # 支持范围请求，用于视频播放
             },
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"下载视频文件失败: {e}", exc_info=True)
+        logger.error(f"获取视频文件失败: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"下载文件失败: {str(e)}",
+            detail=f"获取文件失败: {str(e)}",
         )
 
 
@@ -330,9 +352,6 @@ async def download_markdown(
 
     - **task_id**: 任务 ID（本地任务 ID）
     """
-    from fastapi.responses import FileResponse
-    from pathlib import Path
-
     try:
         logger.info(f"下载 Markdown 文件: task_id={task_id}")
 

@@ -1,0 +1,189 @@
+/* Video Generator Service - Styles */
+
+/* Tailwind Utilities - 转换为纯 CSS */
+.input-focus {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+}
+
+.input-focus:focus {
+    --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+    --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) rgba(37, 99, 235, 0.2);
+    box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+    border-color: #2563eb;
+    outline: none;
+}
+
+.card-hover {
+    transition-property: all;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 200ms;
+}
+
+.card-hover:hover {
+    --tw-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --tw-shadow-colored: 0 4px 6px -1px var(--tw-shadow-color), 0 2px 4px -2px var(--tw-shadow-color);
+    box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+    transform: translateY(-0.25rem);
+}
+
+/* 时间轴样式 */
+.timeline {
+    position: relative;
+    padding-left: 2rem;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 0.5rem;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #e5e7eb;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 1.5rem;
+}
+
+.timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -1.75rem;
+    top: 0.25rem;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 50%;
+    background: #2563eb;
+    border: 2px solid white;
+    box-shadow: 0 0 0 2px #2563eb;
+}
+
+.timeline-item.completed::before {
+    background: #10b981;
+    box-shadow: 0 0 0 2px #10b981;
+}
+
+.timeline-item.error::before {
+    background: #ef4444;
+    box-shadow: 0 0 0 2px #ef4444;
+}
+
+.timeline-item.progress::before {
+    background: #8b5cf6; /* purple-500 */
+    box-shadow: 0 0 0 2px #8b5cf6;
+    animation: pulse 2s infinite;
+}
+
+/* 执行中的呼吸光影效果 - 只应用于最新的 progress 项 */
+.timeline-item.progress.active > div {
+    position: relative;
+    overflow: hidden;
+    animation: breathe 2s ease-in-out infinite;
+}
+
+.timeline-item.progress.active > div::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        135deg,
+        rgba(139, 92, 246, 0.1),
+        rgba(139, 92, 246, 0.2),
+        rgba(139, 92, 246, 0.1)
+    );
+    border-radius: 0.5rem; /* 与 rounded-lg 保持一致 */
+    animation: breathe-glow 2s ease-in-out infinite;
+    pointer-events: none;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+@keyframes breathe {
+    0%, 100% {
+        box-shadow: 0 0 5px rgba(139, 92, 246, 0.2),
+                    0 0 10px rgba(139, 92, 246, 0.15),
+                    0 0 15px rgba(139, 92, 246, 0.1);
+    }
+    50% {
+        box-shadow: 0 0 10px rgba(139, 92, 246, 0.4),
+                    0 0 20px rgba(139, 92, 246, 0.3),
+                    0 0 30px rgba(139, 92, 246, 0.2);
+    }
+}
+
+@keyframes breathe-glow {
+    0%, 100% {
+        opacity: 0.3;
+    }
+    50% {
+        opacity: 0.6;
+    }
+}
+
+/* 左侧内容区域动画 */
+.left-content-area {
+    transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    flex: 1 1 100%;
+    min-width: 0;
+}
+
+.left-content-area.compact {
+    flex: 1 1 66.666667%; /* 2/3 宽度 */
+}
+
+/* 左侧内容内部区域，初始居中，compact 后左对齐 */
+#leftContentInner {
+    transition: margin 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.left-content-area.compact #leftContentInner {
+    margin-left: 0;
+    margin-right: 0;
+}
+
+/* Activity Timeline 面板动画 */
+.timeline-panel {
+    flex: 0 0 0;
+    transform: translateX(100%);
+    opacity: 0;
+    overflow: hidden;
+    transition: flex 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), 
+                opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.timeline-panel.show {
+    flex: 0 0 33.333333%; /* 1/3 宽度 */
+    transform: translateX(0);
+    opacity: 1;
+}
+
+/* 移动端：从下方滑入 */
+@media (max-width: 1024px) {
+    .left-content-area.compact {
+        flex: 1 1 100%;
+    }
+    
+    .timeline-panel {
+        flex: 0 0 0;
+        transform: translateY(100%);
+        max-height: 0;
+    }
+    
+    .timeline-panel.show {
+        flex: 0 0 auto;
+        transform: translateY(0);
+        max-height: 1000px;
+    }
+}

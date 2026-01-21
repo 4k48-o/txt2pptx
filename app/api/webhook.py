@@ -253,9 +253,11 @@ async def handle_task_progress(payload: ManusWebhookPayload, tracker, task_id: s
     # 检查是否是视频生成任务
     local_task = await tracker.find_by_manus_task_id(task_id)
     progress_type = "task_progress"  # 默认类型
+    local_task_id = None
     
     if local_task:
-        task_data = await tracker.get(local_task["id"])
+        local_task_id = local_task["id"]
+        task_data = await tracker.get(local_task_id)
         if task_data:
             metadata = task_data.metadata or {}
             task_type = metadata.get("task_type")
@@ -267,14 +269,42 @@ async def handle_task_progress(payload: ManusWebhookPayload, tracker, task_id: s
                     progress_type = "script_generation_progress"
                 elif task_step == "video_generation":
                     progress_type = "video_generation_progress"
+    else:
+        # 如果找不到 local_task，可能是 video_task_id 或 script_task_id
+        # 尝试通过 metadata 查找（作为后备方案）
+        # 注意：由于我们已经更新了 manus_task_id，这种情况应该很少发生
+        async with tracker._lock:
+            tasks = await tracker._load_tasks()
+            for task_id_key, task_data in tasks.items():
+                metadata = task_data.get("metadata", {})
+                if metadata.get("task_type") == "video_generation":
+                    # 检查是否是 video_task_id 或 script_task_id
+                    if metadata.get("video_task_id") == task_id or metadata.get("script_task_id") == task_id:
+                        local_task = task_data
+                        local_task_id = task_id_key
+                        task_step = metadata.get("step")
+                        if task_step == "script_generation":
+                            progress_type = "script_generation_progress"
+                        elif task_step == "video_generation":
+                            progress_type = "video_generation_progress"
+                        break
     
-    # 通过 WebSocket 通知前端
-    await manager.send_to_task_subscribers(task_id, {
+    # 构建进度消息
+    progress_msg = {
         "type": progress_type,
         "task_id": task_id,
         "message": message,
         "timestamp": datetime.now().isoformat()
-    })
+    }
+    if local_task_id:
+        progress_msg["local_task_id"] = local_task_id
+    
+    # 通过 WebSocket 通知前端
+    # 发送给 task_id 的订阅者（可能是 script_task_id 或 video_task_id）
+    await manager.send_to_task_subscribers(task_id, progress_msg)
+    # 如果找到 local_task_id，也发送给 local_task_id 的订阅者
+    if local_task_id:
+        await manager.send_to_task_subscribers(local_task_id, progress_msg)
 
 
 async def handle_task_stopped(payload: ManusWebhookPayload, tracker):
@@ -428,24 +458,29 @@ async def handle_video_task_stopped(
                     video_task_id = result.get("video_task_id")
                     
                     # 发送脚本生成完成通知
-                    await manager.send_to_task_subscribers(task_id, {
+                    # 同时发送给 script_task_id 和 local_task_id 的订阅者
+                    script_completed_msg = {
                         "type": "script_generation_completed",
                         "task_id": task_id,
                         "local_task_id": local_task_id,
                         "video_task_id": video_task_id,
                         "message": "脚本生成完成，开始生成视频",
                         "timestamp": datetime.now().isoformat()
-                    })
+                    }
+                    await manager.send_to_task_subscribers(task_id, script_completed_msg)
+                    await manager.send_to_task_subscribers(local_task_id, script_completed_msg)
                     
                     # 同时订阅视频生成任务
                     if video_task_id:
-                        await manager.send_to_task_subscribers(video_task_id, {
+                        video_started_msg = {
                             "type": "video_generation_started",
                             "task_id": video_task_id,
                             "local_task_id": local_task_id,
                             "message": "视频生成任务已创建",
                             "timestamp": datetime.now().isoformat()
-                        })
+                        }
+                        await manager.send_to_task_subscribers(video_task_id, video_started_msg)
+                        await manager.send_to_task_subscribers(local_task_id, video_started_msg)
                     
                     logger.info(f"[Webhook] 视频生成任务已创建: video_task_id={video_task_id}")
                     
@@ -484,15 +519,20 @@ async def handle_video_task_stopped(
                     )
                     
                     # 发送视频生成完成通知
-                    await manager.send_to_task_subscribers(task_id, {
+                    # 同时发送给 video_task_id 和 local_task_id 的订阅者
+                    message = {
                         "type": "video_generation_completed",
                         "task_id": task_id,
                         "local_task_id": local_task_id,
                         "video_path": video_path,
-                        "download_url": f"/api/v1/video/tasks/{local_task_id}/download",
+                        "download_url": f"/api/video/tasks/{local_task_id}/download",
                         "message": "视频生成完成！",
                         "timestamp": datetime.now().isoformat()
-                    })
+                    }
+                    # 发送给 video_task_id 的订阅者
+                    await manager.send_to_task_subscribers(task_id, message)
+                    # 同时发送给 local_task_id 的订阅者（前端可能订阅的是 local_task_id）
+                    await manager.send_to_task_subscribers(local_task_id, message)
                     
                     logger.info(f"[Webhook] 视频生成完成通知已发送: video_path={video_path}")
                     

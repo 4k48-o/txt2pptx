@@ -98,22 +98,23 @@ setup_exception_handlers(manus_app)
 # 静态文件目录
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
-# 根路径 - 返回前端页面（必须在其他路由之前注册，确保优先级）
+# 根路径 - 返回服务选择页面或重定向（必须在其他路由之前注册，确保优先级）
 @manus_app.get("/")
 async def root():
-    """根路径，返回前端页面（新版本，Webhook 模式）"""
-    index_file = STATIC_DIR / "index2.html"
+    """根路径，返回服务选择页面"""
+    index_file = STATIC_DIR / "index.html"
     if index_file.exists():
         return FileResponse(index_file)
-    # 如果 index2.html 不存在，回退到 index.html
-    fallback_file = STATIC_DIR / "index.html"
-    if fallback_file.exists():
-        return FileResponse(fallback_file)
     return {
-        "name": "Manus PPT Generator API",
-        "version": "0.2.0",
-        "docs": "/docs",
-        "health": "/api/health",
+        "name": "Manus Multi-Service API",
+        "version": "0.3.0",
+        "services": {
+            "ppt": "/manus/ppt",
+            "video": "/manus/video",
+            "crawler": "/manus/crawler",
+        },
+        "docs": "/manus/docs",
+        "health": "/manus/api/health",
     }
 
 # 注册路由（在根路径之后注册，避免覆盖）
@@ -122,40 +123,91 @@ manus_app.include_router(api_router)
 # 注册 WebSocket 路由
 manus_app.include_router(websocket_router)
 
-# 注册 Webhook 路由
-manus_app.include_router(webhook_router)
+# Webhook 路由：根据 webhook_path 配置决定注册位置
+# 如果 webhook_path 以 /manus 开头，则在 manus_app 上注册（路径：/manus/webhook/manus）
+# 否则在根应用上注册（路径：/webhook/manus）
+# 注意：webhook_path 配置应该与路由注册位置匹配
+webhook_path = settings.normalized_webhook_path()
+if webhook_path.startswith("/manus"):
+    # webhook_path 包含 /manus，在 manus_app 上注册
+    manus_app.include_router(webhook_router)
+    logger.info(f"Webhook 路由注册在 manus_app 上，完整路径: /manus{webhook_path}")
+else:
+    # webhook_path 不包含 /manus，稍后在根应用上注册
+    logger.info(f"Webhook 路由将在 root_app 上注册，完整路径: {webhook_path}")
 
 
-@manus_app.get("/realtime")
-async def realtime_page():
-    """实时模式页面（WebSocket + Webhook）"""
-    webhook_file = STATIC_DIR / "webhook.html"
-    if webhook_file.exists():
-        return FileResponse(webhook_file)
-    return {"error": "webhook.html not found"}
+# ========== 服务页面路由 ==========
 
-
-@manus_app.get("/tasks")
-async def tasks_page():
-    """任务列表页面"""
-    tasks_file = STATIC_DIR / "tasks.html"
-    if tasks_file.exists():
-        return FileResponse(tasks_file)
-    return {"error": "tasks.html not found"}
+@manus_app.get("/ppt")
+async def ppt_page():
+    """PPT 生成服务页面"""
+    ppt_file = STATIC_DIR / "ppt" / "index.html"
+    if ppt_file.exists():
+        return FileResponse(ppt_file)
+    # 向后兼容：尝试旧路径
+    fallback_file = STATIC_DIR / "index.html"
+    if fallback_file.exists():
+        return FileResponse(fallback_file)
+    return {"error": "PPT service page not found"}
 
 
 @manus_app.get("/video")
 async def video_page():
-    """视频生成页面"""
-    video_file = STATIC_DIR / "video.html"
+    """视频生成服务页面"""
+    video_file = STATIC_DIR / "video" / "index.html"
     if video_file.exists():
         return FileResponse(video_file)
-    return {"error": "video.html not found"}
+    # 向后兼容：尝试旧路径
+    fallback_file = STATIC_DIR / "video.html"
+    if fallback_file.exists():
+        return FileResponse(fallback_file)
+    return {"error": "Video service page not found"}
+
+
+@manus_app.get("/crawler")
+async def crawler_page():
+    """爬虫服务页面"""
+    crawler_file = STATIC_DIR / "crawler" / "index.html"
+    if crawler_file.exists():
+        return FileResponse(crawler_file)
+    return {"error": "Crawler service page not found"}
+
+
+# ========== 向后兼容的旧路由（标记为废弃） ==========
+
+@manus_app.get("/realtime")
+async def realtime_page():
+    """实时模式页面（WebSocket + Webhook）- 已废弃，请使用 /ppt"""
+    webhook_file = STATIC_DIR / "webhook.html"
+    if webhook_file.exists():
+        return FileResponse(webhook_file)
+    return {"error": "webhook.html not found", "deprecated": True, "use": "/manus/ppt"}
+
+
+@manus_app.get("/tasks")
+async def tasks_page():
+    """任务列表页面 - 已废弃，请使用 /ppt"""
+    tasks_file = STATIC_DIR / "tasks.html"
+    if tasks_file.exists():
+        return FileResponse(tasks_file)
+    return {"error": "tasks.html not found", "deprecated": True, "use": "/manus/ppt"}
 
 
 # 挂载静态文件（放在最后，避免覆盖其他路由）
 if STATIC_DIR.exists():
     manus_app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+# Favicon 路由（避免 404 错误）
+@manus_app.get("/favicon.ico")
+async def favicon():
+    """返回 favicon，使用 logo 作为图标"""
+    favicon_path = STATIC_DIR / "logo" / "logo.png"
+    if favicon_path.exists():
+        return FileResponse(favicon_path, media_type="image/png")
+    # 如果不存在，返回 204 No Content
+    from fastapi.responses import Response
+    return Response(status_code=204)
 
 
 # ========== 根应用（只负责挂载业务子应用到 /manus） ==========
@@ -167,11 +219,37 @@ root_app = FastAPI(
     redoc_url=None,
 )
 
+# 为根应用添加异常处理器（webhook 路由可能需要）
+setup_exception_handlers(root_app)
+
+# 如果 webhook_path 不包含 /manus，在根应用上注册 webhook 路由
+# （如果包含 /manus，则已在上面注册到 manus_app）
+if not webhook_path.startswith("/manus"):
+    root_app.include_router(webhook_router)
+    logger.info(f"Webhook 路由注册在 root_app 上，完整路径: {webhook_path}")
+
 
 @root_app.get("/")
 async def root_redirect():
     """根路径重定向到 /manus/（避免用户误访问根路径）"""
     return RedirectResponse(url="/manus/", status_code=307)
+
+# 根应用的 favicon 路由
+@root_app.get("/favicon.ico")
+async def root_favicon():
+    """返回 favicon"""
+    favicon_path = STATIC_DIR / "logo" / "logo.png"
+    if favicon_path.exists():
+        return FileResponse(favicon_path, media_type="image/png")
+    from fastapi.responses import Response
+    return Response(status_code=204)
+
+# Service Worker 路由（避免 404 错误）
+@root_app.get("/service-worker.js")
+async def service_worker():
+    """Service Worker - 返回 204 No Content（当前未实现 PWA）"""
+    from fastapi.responses import Response
+    return Response(status_code=204)
 
 
 # 对外统一入口：/manus/*

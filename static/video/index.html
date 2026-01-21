@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DLY AI - Video Generator Service</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    
+    <!-- Tailwind 配置（必须在 Tailwind 加载后立即执行） -->
+    <script>
+        (function() {
+            const script = document.createElement('script');
+            const appBase = window.location.pathname.startsWith('/manus') ? '/manus' : '';
+            const timestamp = Date.now();
+            script.src = `${appBase}/static/video/config.js?v=${timestamp}`;
+            script.async = false;
+            document.head.appendChild(script);
+            
+            // 配置加载后，加载自定义样式
+            script.onload = function() {
+                const styleLink = document.createElement('link');
+                styleLink.rel = 'stylesheet';
+                styleLink.href = `${appBase}/static/video/styles.css?v=${timestamp}`;
+                document.head.appendChild(styleLink);
+            };
+        })();
+    </script>
+</head>
+<body class="bg-neutral font-sans text-gray-800 min-h-screen">
+    <!-- 顶部导航栏 -->
+    <header class="bg-white shadow-soft py-4 px-6 md:px-12 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <a href="/manus/">
+                <img src="/manus/static/logo/logo.png" alt="DLY AI" class="h-8 w-auto" />
+            </a>
+        </div>
+        <div class="flex items-center gap-6">
+            <div class="flex items-center gap-2">
+                <span class="text-gray-500 text-sm">1,640</span>
+                <i class="fa fa-bolt text-yellow-500"></i>
+            </div>
+            <a href="/manus/" class="text-gray-600 hover:text-gray-900 text-sm">Services</a>
+            <a href="/manus/ppt" class="text-gray-600 hover:text-gray-900 text-sm">PPT</a>
+            <a href="/manus/crawler" class="text-gray-600 hover:text-gray-900 text-sm">Crawler</a>
+            <div class="w-8 h-8 rounded-full bg-gray-300 overflow-hidden">
+                <img src="https://picsum.photos/200/200" alt="User avatar" class="w-full h-full object-cover">
+            </div>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="max-w-7xl mx-auto px-6 md:px-12 py-12">
+        <!-- 标题区域 -->
+        <div class="text-center mb-10">
+            <h1 class="text-[clamp(2rem,5vw,3rem)] font-bold bg-gradient-to-r from-purple-500 to-purple-600 bg-clip-text text-transparent mb-4" style="text-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);">What video can I create for you?</h1>
+            <div class="inline-flex items-center gap-2 bg-secondary px-4 py-2 rounded-full">
+                <span class="text-gray-600 text-sm">Free Plan</span>
+                <span class="text-sm font-medium bg-gradient-to-r from-purple-500 to-purple-600 bg-clip-text text-transparent">Start Free Trial</span>
+            </div>
+        </div>
+
+        <div class="flex flex-col lg:flex-row gap-8 relative">
+            <!-- 左侧：输入区域 -->
+            <div id="leftContentArea" class="left-content-area">
+                <!-- 核心输入区域 -->
+                <div class="max-w-4xl mb-8" id="leftContentInner">
+                    <!-- 主题输入框 -->
+                    <div class="bg-white rounded-2xl shadow-soft p-1 mb-4">
+                        <textarea 
+                            id="topicInput"
+                            placeholder="Describe the video you want to create... (e.g., Introduction to Artificial Intelligence)" 
+                            class="w-full px-4 py-6 text-lg border-0 resize-none input-focus rounded-2xl h-32"
+                        ></textarea>
+                    </div>
+                    <!-- 错误消息显示区域 -->
+                    <div id="topicError" class="hidden mb-4">
+                        <p class="text-sm text-red-500 flex items-center gap-1">
+                            <i class="fa fa-exclamation-circle"></i>
+                            <span>Please enter a video topic</span>
+                        </p>
+                    </div>
+                    
+                    <!-- Video 配置选项 -->
+                    <div class="bg-white rounded-2xl shadow-soft p-6 mb-4">
+                        <h3 class="text-lg font-semibold mb-4 text-gray-900">Video Settings</h3>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <!-- 时长选择 -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    <i class="fa fa-clock-o mr-1"></i> Duration (seconds)
+                                </label>
+                                <div class="relative">
+                                    <select id="durationSelect" class="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg text-sm input-focus bg-white appearance-none">
+                                        <option value="5">5</option>
+                                        <option value="10">10</option>
+                                        <option value="15" selected>15</option>
+                                        <option value="20">20</option>
+                                        <option value="25">25</option>
+                                        <option value="30">30</option>
+                                    </select>
+                                    <i class="fa fa-caret-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-xs"></i>
+                                </div>
+                            </div>
+                            
+                            <!-- 样式选择 -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    <i class="fa fa-tint mr-1"></i> Style
+                                </label>
+                                <div class="relative">
+                                    <select id="styleSelect" class="w-full px-3 py-2 pl-8 pr-8 border border-gray-300 rounded-lg text-sm input-focus bg-white appearance-none">
+                                        <option value="educational">Educational</option>
+                                        <option value="promotional">Promotional</option>
+                                        <option value="documentary">Documentary</option>
+                                        <option value="tutorial">Tutorial</option>
+                                        <option value="corporate">Corporate</option>
+                                    </select>
+                                    <i id="styleSelectIcon" class="fa fa-film absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none"></i>
+                                    <i class="fa fa-caret-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-xs"></i>
+                                </div>
+                            </div>
+                            
+                            <!-- 目标人群 -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    <i class="fa fa-users mr-1"></i> Audience
+                                </label>
+                                <div class="relative">
+                                    <select id="audienceSelect" class="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg text-sm input-focus bg-white appearance-none">
+                                        <option value="general">General Public</option>
+                                        <option value="students">Students</option>
+                                        <option value="professionals">Professionals</option>
+                                        <option value="executives">Executives</option>
+                                    </select>
+                                    <i class="fa fa-caret-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-xs"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 测试模式切换 -->
+                    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <i class="fa fa-flask text-yellow-600"></i>
+                                <span class="text-sm font-medium text-yellow-800">Test Mode (No API Cost)</span>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="testModeToggle" class="sr-only peer" onchange="toggleTestMode()">
+                                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                            </label>
+                        </div>
+                        <div id="testModePanel" class="hidden mt-3">
+                            <div class="mb-2">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Select Historical Task:</label>
+                                <select id="testTaskSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm input-focus bg-white">
+                                    <option value="">Loading tasks...</option>
+                                </select>
+                            </div>
+                            <div class="mb-2">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Playback Speed:</label>
+                                <select id="testSpeedSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm input-focus bg-white">
+                                    <option value="0.5">0.5x (Slow)</option>
+                                    <option value="1.0" selected>1.0x (Normal)</option>
+                                    <option value="2.0">2.0x (Fast)</option>
+                                    <option value="5.0">5.0x (Very Fast)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 提交按钮 -->
+                    <div class="flex justify-end gap-3 mb-4">
+                        <button 
+                            id="generateBtn"
+                            onclick="generateVideo()"
+                            class="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg font-medium hover:from-purple-600 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                        >
+                            <i class="fa fa-video-camera"></i>
+                            <span id="generateBtnText">Generate Video</span>
+                        </button>
+                    </div>
+
+                    <!-- 示例提示词区域 -->
+                    <div class="mb-8">
+                        <div class="flex items-center gap-2 mb-4">
+                            <h2 class="text-lg font-semibold">Example Topics</h2>
+                            <button 
+                                id="refreshPromptsBtn"
+                                onclick="refreshExamplePrompts()"
+                                class="flex items-center gap-1 px-2 py-1 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                                title="刷新提示词"
+                            >
+                                <i class="fa fa-refresh"></i>
+                            </button>
+                        </div>
+                        <div id="examplePromptsContainer" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <!-- 提示词将通过 JavaScript 动态渲染 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：时间轴和状态 -->
+            <div id="timelinePanel" class="bg-white rounded-2xl shadow-soft p-6 sticky top-4 timeline-panel">
+                <h3 class="text-lg font-semibold mb-4 text-gray-900">
+                    <i class="fa fa-clock-o mr-2"></i>Activity Timeline
+                </h3>
+                
+                <!-- WebSocket 连接状态 -->
+                <div id="wsStatus" class="mb-4 p-3 rounded-lg bg-gray-50 flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full bg-gray-400" id="wsIndicator"></div>
+                    <span class="text-sm text-gray-600" id="wsStatusText">Connecting...</span>
+                </div>
+                
+                <!-- 时间轴容器 -->
+                <div id="timelineContainer" class="timeline min-h-[200px]">
+                    <div class="text-center text-gray-400 text-sm py-8" id="emptyTimeline">
+                        No activity yet. Start generating to see progress.
+                    </div>
+                </div>
+                
+                <!-- 视频播放和下载区域（完成后显示） -->
+                <div id="downloadSection" class="mt-4 hidden">
+                    <!-- 视频播放器 -->
+                    <div id="videoPlayerContainer" class="mb-4 hidden">
+                        <video 
+                            id="videoPlayer" 
+                            controls 
+                            class="w-full rounded-lg shadow-md bg-black"
+                            style="max-height: 400px;"
+                        >
+                            Your browser does not support the video tag.
+                        </video>
+                    </div>
+                    
+                    <!-- 操作按钮 -->
+                    <div class="flex gap-2">
+                        <button 
+                            id="playVideoBtn"
+                            onclick="playVideo()"
+                            class="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-medium hover:from-green-600 hover:to-green-700 transition-all shadow-lg"
+                        >
+                            <i class="fa fa-play"></i>
+                            <span>Play Video</span>
+                        </button>
+                        <button 
+                            id="downloadBtn"
+                            onclick="downloadVideo()"
+                            class="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg font-medium hover:from-purple-600 hover:to-purple-700 transition-all shadow-lg"
+                        >
+                            <i class="fa fa-download"></i>
+                            <span>Download</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-white mt-20 py-8 px-6 md:px-12 border-t border-gray-100">
+        <div class="max-w-7xl mx-auto text-center text-sm text-gray-500">
+            <p>© 2026 DLY AI. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- Video Generator Application Script -->
+    <!-- 使用时间戳避免缓存，确保每次加载最新代码 -->
+    <script>
+        (function() {
+            const script = document.createElement('script');
+            const appBase = window.location.pathname.startsWith('/manus') ? '/manus' : '';
+            // 使用当前时间戳作为版本号，确保每次加载最新代码
+            const timestamp = Date.now();
+            script.src = `${appBase}/static/video/app.js?v=${timestamp}`;
+            script.async = false;
+            document.head.appendChild(script);
+        })();
+    </script>
+</body>
+</html>
